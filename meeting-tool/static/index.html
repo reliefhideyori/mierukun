@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>会議支援ツール</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+
+  <!-- 文字起こし中インジケータ（同席者への配慮） -->
+  <div id="recording-indicator" class="rec-indicator hidden">
+    <span class="rec-dot"></span>この会議は文字起こし中です
+  </div>
+
+  <div class="app-layout">
+
+    <!-- ===== コントロールバー ===== -->
+    <header class="ctrl-bar">
+      <div class="ctrl-left">
+        <h1 class="app-title">会議支援ツール</h1>
+        <div class="badges">
+          <span id="ws-status"  class="badge badge-gray">未接続</span>
+          <span id="asr-status" class="badge badge-gray">ASR停止</span>
+        </div>
+      </div>
+
+      <div class="ctrl-right">
+        <!-- VUメーター -->
+        <div class="vu-wrap" title="マイク入力レベル">
+          <span class="vu-label">MIC</span>
+          <canvas id="vu-canvas" width="140" height="16"></canvas>
+        </div>
+
+        <div class="btn-row">
+          <button id="btn-start"  class="btn btn-start">▶ 開始</button>
+          <button id="btn-stop"   class="btn btn-stop"   disabled>■ 停止</button>
+          <button id="btn-manual" class="btn btn-manual" disabled title="ここまでを今すぐ要約">✓ 確定</button>
+          <button id="btn-reset"  class="btn btn-reset"  disabled title="セッションをリセット">↺</button>
+        </div>
+      </div>
+    </header>
+
+    <!-- バッファ進捗 -->
+    <div class="buffer-strip">
+      <span class="buf-label">バッファ</span>
+      <div class="buf-track"><div id="buffer-fill" class="buf-fill" style="width:0%"></div></div>
+      <span id="buffer-text" class="buf-text">0 / 25 文字</span>
+    </div>
+
+    <!-- ===== メインエリア: ホワイトボード ===== -->
+    <div class="wb-section" id="summary-section">
+
+      <!-- ツールバー -->
+      <div class="wb-toolbar">
+        <div class="wb-toolbar-left">
+          <span class="wb-badge">A</span>
+          <span class="wb-title-text">ライブ要約</span>
+        </div>
+        <span id="summary-status" class="wb-status">待機中</span>
+      </div>
+
+      <!-- ホワイトボード本体（スクロール可能） -->
+      <div id="whiteboard" class="whiteboard">
+        <div id="wb-entries" class="wb-entries">
+          <div class="wb-placeholder" id="wb-placeholder">
+            <div class="wb-placeholder-icon">📋</div>
+            <p class="wb-placeholder-text">「開始」ボタンを押すと</p>
+            <p class="wb-placeholder-sub">文字起こしとライブ要約が始まります</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- 新着スクロール通知（上スクロール中に表示） -->
+      <div class="scroll-notify hidden" id="scroll-notify">
+        <button id="btn-scroll-new" class="btn-scroll-new">
+          <span id="scroll-notify-text">↓ 新しい要約 1件</span>
+        </button>
+      </div>
+
+      <!-- 認識中テキスト（暫定） -->
+      <div class="partial-strip">
+        <span class="partial-icon">✍</span>
+        <span id="partial-text" class="partial-text"></span>
+      </div>
+
+    </div><!-- /wb-section -->
+
+    <!-- ===== 直近ログ（折りたたみ） ===== -->
+    <div class="log-section">
+      <div class="log-header" id="log-toggle">
+        <span class="log-title">直近ログ（確定テキスト）</span>
+        <div class="log-header-right">
+          <button id="btn-clear-log" class="btn-text">クリア</button>
+          <button id="btn-log-toggle" class="btn-text log-toggle-btn">▲ 閉じる</button>
+        </div>
+      </div>
+      <div id="log-area" class="log-area">
+        <p class="log-placeholder">確定した発言がここに流れます。</p>
+      </div>
+    </div>
+
+  </div><!-- /app-layout -->
+
+  <div id="toast-container" class="toast-container"></div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
