@@ -181,6 +181,5 @@ if __name__ == "__main__":
         exit(1)
 
     print("\n会議支援ツールを起動します…")
-    print("ブラウザで http://localhost:8000 を開いてください")
-    print("※初回起動時はWhisperモデルのダウンロードがあります（medium: 約1.5GB）\n")
+    print("ブラウザで http://localhost:8000 を開いてください\n")
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=False)
