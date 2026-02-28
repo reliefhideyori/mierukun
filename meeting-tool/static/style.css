@@ -497,3 +497,90 @@ body {
   from { opacity: 0; transform: translateX(16px); }
   to   { opacity: 1; transform: translateX(0); }
 }
+
+/* ============================================================
+   マインドマップセクション
+   ============================================================ */
+.mm-section {
+  flex-shrink: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.mm-toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.btn-mindmap {
+  background: var(--accent-bg);
+  border: 1px solid var(--accent);
+  color: var(--accent-light);
+  padding: 0.25rem 0.8rem;
+  border-radius: 6px;
+  font-size: 0.82rem;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.btn-mindmap:hover:not(:disabled) { background: var(--accent-glow); }
+.btn-mindmap:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.mm-body {
+  position: relative;
+  height: 260px;
+}
+
+.mm-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  gap: 0.25rem;
+  color: var(--text-dim);
+  font-size: 0.85rem;
+}
+
+.mm-svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+.mm-svg.hidden { display: none; }
+.mm-placeholder.hidden { display: none; }
+
+/* ── ノード共通 ── */
+.mm-node ellipse {
+  stroke-width: 1.5px;
+  fill-opacity: 0.92;
+}
+.mm-node text {
+  font-family: var(--font);
+  font-size: 10px;
+  pointer-events: none;
+}
+
+/* センターノード */
+.mm-center ellipse { fill: #4f46e5; stroke: #7b87f5; }
+.mm-center text    { fill: #fff; font-weight: 700; font-size: 11px; }
+
+/* グループノード */
+.mm-group ellipse { fill: #1e3a5f; stroke: #38c98a; }
+.mm-group text    { fill: #38c98a; font-weight: 600; }
+
+/* アイデアノード */
+.mm-idea ellipse { fill: #1a1e2e; stroke: #5b67f0; }
+.mm-idea text    { fill: #b8c0e0; }
+
+/* エッジ */
+.mm-edge {
+  stroke: #3a4060;
+  stroke-width: 1.2px;
+}
+.mm-edge-group {
+  stroke: #2e5e40;
+  stroke-width: 1.6px;
+}

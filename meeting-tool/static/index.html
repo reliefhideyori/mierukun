@@ -36,7 +36,7 @@
           <button id="btn-start"  class="btn btn-start">▶ 開始</button>
           <button id="btn-stop"   class="btn btn-stop"   disabled>■ 停止</button>
           <button id="btn-manual" class="btn btn-manual" disabled title="ここまでを今すぐ要約">✓ 確定</button>
-          <button id="btn-reset"  class="btn btn-reset"  disabled title="セッションをリセット">↺</button>
+          <button id="btn-reset"   class="btn btn-reset"   disabled title="セッションをリセット">↺</button>
         </div>
       </div>
     </header>
@@ -85,6 +85,28 @@
       </div>
 
     </div><!-- /wb-section -->
+
+    <!-- ===== マインドマップ ===== -->
+    <div class="mm-section" id="mm-section">
+      <div class="wb-toolbar">
+        <div class="wb-toolbar-left">
+          <span class="wb-badge">M</span>
+          <span class="wb-title-text">マインドマップ</span>
+        </div>
+        <div class="mm-toolbar-right">
+          <span id="mm-status" class="wb-status"></span>
+          <button id="btn-mindmap" class="btn btn-mindmap" disabled title="会議内容をマインドマップで整理">🗺 生成</button>
+        </div>
+      </div>
+      <div class="mm-body">
+        <div id="mm-placeholder" class="mm-placeholder">
+          <div class="wb-placeholder-icon">🗺</div>
+          <p class="wb-placeholder-text">「生成」ボタンを押すと</p>
+          <p class="wb-placeholder-sub">会議のアイデアをマインドマップで表示します</p>
+        </div>
+        <svg id="mm-svg" class="mm-svg hidden" xmlns="http://www.w3.org/2000/svg"></svg>
+      </div>
+    </div>
 
     <!-- ===== 直近ログ（折りたたみ） ===== -->
     <div class="log-section">

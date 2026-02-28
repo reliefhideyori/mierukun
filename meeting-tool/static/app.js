@@ -50,6 +50,7 @@ const S = {
   chunkHasAudio:      false,   // 直近チャンクに発話があったか
   partialClearTimer:  null,
   logOpen:            true,
+  fullTranscript:     '',      // マインドマップ生成用：確定テキストの蓄積
 };
 
 // ============================================================
@@ -88,6 +89,10 @@ const el = {
   btnClearLog:      document.getElementById('btn-clear-log'),
   btnLogToggle:     document.getElementById('btn-log-toggle'),
   toastCont:        document.getElementById('toast-container'),
+  btnMindmap:       document.getElementById('btn-mindmap'),
+  mmStatus:         document.getElementById('mm-status'),
+  mmPlaceholder:    document.getElementById('mm-placeholder'),
+  mmSvg:            document.getElementById('mm-svg'),
 };
 
 // ============================================================
@@ -177,11 +182,14 @@ function handleMsg(msg) {
       clearTimeout(S.partialClearTimer);
       S.partialClearTimer = setTimeout(clearPartial, 3000);
       S.silenceStart = null;  // 発話確認 → 沈黙クロックをリセット
+      S.fullTranscript += msg.text + ' ';
+      if (S.summaryCount > 0) el.btnMindmap.disabled = false;
       break;
 
     case 'summary_update':
       setASRBadge(S.isRunning ? '録音中' : '停止', S.isRunning ? 'green' : 'gray');
       appendSummaryCard(msg.summary, msg.update_id);
+      el.btnMindmap.disabled = false;
       break;
 
     case 'summarizing':
@@ -336,6 +344,9 @@ function stopSession() {
 function doReset() {
   S.summaryCount = S.pendingScrollCount = S.localBufChars = S.lastTriggerTime = 0;
   S.isHeld = false;
+  S.fullTranscript = '';
+  el.btnMindmap.disabled = true;
+  mmReset();
 
   el.wbEntries.innerHTML = `
     <div class="wb-placeholder" id="wb-placeholder">
@@ -585,6 +596,153 @@ el.btnLogToggle.addEventListener('click', () => {
   el.logArea.classList.toggle('is-collapsed', !S.logOpen);
   el.btnLogToggle.textContent = S.logOpen ? '▲ 閉じる' : '▼ 開く';
 });
+
+// ============================================================
+// マインドマップ
+// ============================================================
+
+function mmReset() {
+  el.mmSvg.classList.add('hidden');
+  el.mmPlaceholder.classList.remove('hidden');
+  el.mmSvg.innerHTML = '';
+  el.mmStatus.textContent = '';
+}
+
+el.btnMindmap.addEventListener('click', async () => {
+  const text = S.fullTranscript.trim();
+  if (!text) {
+    toast('まだ文字起こしがありません', 'info');
+    return;
+  }
+
+  el.btnMindmap.disabled = true;
+  el.mmStatus.textContent = '生成中…';
+
+  try {
+    const res = await fetch('/mindmap', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || `HTTP ${res.status}`);
+    }
+    const data = await res.json();
+    mmRender(data);
+    el.mmStatus.textContent = data.grouped
+      ? `グルーピングあり（アイデア ${mmCountIdeas(data)}個）`
+      : `フラット（アイデア ${data.ideas.length}個）`;
+  } catch (e) {
+    el.mmStatus.textContent = 'エラー';
+    toast(`マインドマップ生成エラー: ${e.message}`, 'error', 6000);
+  } finally {
+    el.btnMindmap.disabled = false;
+  }
+});
+
+function mmCountIdeas(data) {
+  if (!data.grouped) return data.ideas.length;
+  return (data.groups || []).reduce((n, g) => n + g.ideas.length, 0);
+}
+
+/**
+ * マインドマップを SVG でレンダリングする
+ * grouped=false → センター → アイデア（円形配置）
+ * grouped=true  → センター → グループ → アイデア（2段円形配置）
+ */
+function mmRender(data) {
+  const svg = el.mmSvg;
+  svg.innerHTML = '';
+
+  const W = svg.clientWidth  || 800;
+  const H = svg.clientHeight || 420;
+  const cx = W / 2;
+  const cy = H / 2;
+
+  // ─ ヘルパー ─
+  function el2(tag, attrs = {}) {
+    const e = document.createElementNS('http://www.w3.org/2000/svg', tag);
+    for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);
+    return e;
+  }
+
+  function addLine(x1, y1, x2, y2, cls) {
+    svg.appendChild(el2('line', { x1, y1, x2, y2, class: cls }));
+  }
+
+  function addNode(x, y, text, cls) {
+    const g   = el2('g', { class: `mm-node ${cls}`, transform: `translate(${x},${y})` });
+    const rx  = cls === 'mm-center' ? 54 : cls === 'mm-group' ? 42 : 36;
+    const ry  = cls === 'mm-center' ? 22 : cls === 'mm-group' ? 18 : 15;
+    g.appendChild(el2('ellipse', { cx: 0, cy: 0, rx, ry }));
+
+    // テキストは 8 文字で折り返し
+    const words  = splitText(text, 8);
+    const lh     = 13;
+    const startY = -((words.length - 1) * lh) / 2;
+    words.forEach((w, i) => {
+      const t = el2('text', { x: 0, y: startY + i * lh, 'text-anchor': 'middle', 'dominant-baseline': 'middle' });
+      t.textContent = w;
+      g.appendChild(t);
+    });
+    svg.appendChild(g);
+  }
+
+  function splitText(t, maxLen) {
+    if (t.length <= maxLen) return [t];
+    const lines = [];
+    for (let i = 0; i < t.length; i += maxLen) lines.push(t.slice(i, i + maxLen));
+    return lines;
+  }
+
+  function polar(r, angleDeg) {
+    const rad = (angleDeg - 90) * Math.PI / 180;
+    return { x: cx + r * Math.cos(rad), y: cy + r * Math.sin(rad) };
+  }
+
+  if (!data.grouped) {
+    // ── グルーピングなし（10個以下） ──
+    const ideas = data.ideas || [];
+    const r = Math.min(W, H) * 0.38;
+    ideas.forEach((idea, i) => {
+      const angle = (360 / ideas.length) * i;
+      const { x, y } = polar(r, angle);
+      addLine(cx, cy, x, y, 'mm-edge');
+      addNode(x, y, idea, 'mm-idea');
+    });
+    addNode(cx, cy, data.center, 'mm-center');
+
+  } else {
+    // ── グルーピングあり（11個以上） ──
+    const groups = data.groups || [];
+    const r1 = Math.min(W, H) * 0.28;   // センター → グループ
+    const r2 = Math.min(W, H) * 0.44;   // グループ → アイデア
+
+    groups.forEach((grp, gi) => {
+      const gAngle = (360 / groups.length) * gi;
+      const gPos   = polar(r1, gAngle);
+
+      addLine(cx, cy, gPos.x, gPos.y, 'mm-edge mm-edge-group');
+      addNode(gPos.x, gPos.y, grp.label, 'mm-group');
+
+      const ideas = grp.ideas || [];
+      const spread = Math.min(60, 120 / Math.max(ideas.length, 1));
+      const startA = gAngle - spread * (ideas.length - 1) / 2;
+
+      ideas.forEach((idea, ii) => {
+        const iAngle = startA + spread * ii;
+        const iPos   = polar(r2, iAngle);
+        addLine(gPos.x, gPos.y, iPos.x, iPos.y, 'mm-edge');
+        addNode(iPos.x, iPos.y, idea, 'mm-idea');
+      });
+    });
+    addNode(cx, cy, data.center, 'mm-center');
+  }
+
+  el.mmPlaceholder.classList.add('hidden');
+  svg.classList.remove('hidden');
+}
 
 // ============================================================
 // 初期化

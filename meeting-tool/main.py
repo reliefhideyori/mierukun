@@ -13,29 +13,36 @@ import time
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
 from dotenv import load_dotenv
 
 from asr_engine import WhisperASR
 from summarizer import Summarizer
+from mindmap import MindmapGenerator
 
 load_dotenv()
 
-# ==================== ASR グローバル状態 ====================
+# ==================== ASR / Mindmap グローバル状態 ====================
 _asr: WhisperASR | None = None
 _asr_ready = asyncio.Event()
+_mindmap_gen: MindmapGenerator | None = None
 
 
 async def _load_asr_model() -> None:
     """起動時にバックグラウンドでモデルをロード"""
-    global _asr
+    global _asr, _mindmap_gen
     try:
         _asr = await asyncio.to_thread(WhisperASR)
         _asr_ready.set()
     except Exception as exc:
         print(f"\n[ERROR] ASR モデルのロードに失敗しました: {exc}")
         print("  → requirements.txt の依存関係が正しくインストールされているか確認してください。\n")
+    try:
+        _mindmap_gen = MindmapGenerator()
+    except Exception as exc:
+        print(f"\n[ERROR] MindmapGenerator の初期化に失敗しました: {exc}\n")
 
 
 @asynccontextmanager
@@ -57,6 +64,34 @@ async def index():
 # ==================== 設定値 ====================
 COOLDOWN_MS = int(os.getenv("COOLDOWN_MS", "1500"))
 MIN_CHARS   = int(os.getenv("MIN_CHARS_FOR_UPDATE", "25"))
+
+
+# ==================== マインドマップ API ====================
+class MindmapRequest(BaseModel):
+    text: str
+
+
+@app.post("/mindmap")
+async def generate_mindmap(req: MindmapRequest):
+    """会議テキストからマインドマップデータを生成する"""
+    if _mindmap_gen is None:
+        return JSONResponse(
+            status_code=503,
+            content={"error": "MindmapGenerator が初期化されていません。"},
+        )
+    if not req.text.strip():
+        return JSONResponse(
+            status_code=400,
+            content={"error": "テキストが空です。"},
+        )
+    try:
+        data = await _mindmap_gen.generate(req.text)
+        return JSONResponse(content=data)
+    except Exception as exc:
+        return JSONResponse(
+            status_code=500,
+            content={"error": f"マインドマップの生成に失敗しました: {exc}"},
+        )
 
 
 # ==================== セッション管理 ====================
