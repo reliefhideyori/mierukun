@@ -20,7 +20,7 @@
 // 設定
 // ============================================================
 const CFG = {
-  WS_URL:             `ws://${location.host}/ws`,
+  WS_URL:             `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`,
   SILENCE_MS:         1200,   // 無音判定時間 (ms)
   SILENCE_LEVEL:      0.010,  // 無音とみなす RMS レベル
   VOICE_LEVEL:        0.018,  // 発話とみなす RMS レベル
