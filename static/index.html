@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>音声文字起こし + アイデアマップ</title>
+  <style>
+    :root {
+      --bg:       #0f1117;
+      --surface:  #1a1e2e;
+      --surface2: #222739;
+      --border:   #2d3458;
+      --accent:   #6c63ff;
+      --red:      #ef4444;
+      --green:    #22c55e;
+      --orange:   #f59e0b;
+      --text:     #e2e8f0;
+      --muted:    #94a3b8;
+      --radius:   12px;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Hiragino Sans", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding-bottom: 48px;
+    }
+
+    /* ── ヘッダー ── */
+    header {
+      width: 100%; max-width: 960px;
+      padding: 20px 20px 0;
+      display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    }
+    h1 { font-size: 1.05rem; font-weight: 700; white-space: nowrap; }
+    .header-right { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .badge {
+      font-size: .72rem; padding: 3px 10px; border-radius: 100px; font-weight: 600;
+    }
+    .badge-gray   { background:#2d3458; color:#94a3b8; }
+    .badge-green  { background:#14532d; color:#4ade80; }
+    .badge-red    { background:#450a0a; color:#f87171; }
+    .badge-yellow { background:#451a03; color:#fbbf24; }
+
+    /* ── 処理中バッジ ── */
+    .proc-badge {
+      font-size: .72rem; padding: 3px 10px; border-radius: 100px; font-weight: 600;
+      background: rgba(245,158,11,.15); color: #fbbf24;
+      border: 1px solid rgba(245,158,11,.3);
+      animation: procpulse 1.8s ease-in-out infinite;
+    }
+    @keyframes procpulse { 0%,100%{opacity:.7} 50%{opacity:1} }
+
+    /* ── メインマインドマップカード ── */
+    .mindmap-main-card {
+      width: 100%; max-width: 960px;
+      margin: 16px 20px 0;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      position: relative;
+      min-height: 320px;
+      overflow: hidden;
+    }
+    .mindmap-main-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 8px 14px 6px;
+      border-bottom: 1px solid var(--border);
+      gap: 12px;
+    }
+    .mindmap-main-label {
+      font-size: .72rem; font-weight: 700; color: var(--muted);
+      text-transform: uppercase; letter-spacing: .07em; white-space: nowrap;
+    }
+    #status-text {
+      font-size: .75rem; color: var(--muted); text-align: right;
+    }
+    #status-text.err { color: #f87171; }
+
+    #mindmap-main-inner {
+      padding: 6px 8px 68px;  /* 下: オーバーレイと重ならないよう余白 */
+      min-height: 280px;
+      overflow: hidden;
+    }
+    #mindmap-main-inner svg {
+      width: 100%;
+      max-width: 960px;
+      height: auto;           /* viewBox アスペクト比に従い自動計算 */
+      display: block;
+      margin: 0 auto;
+    }
+    #mindmap-main-inner .empty-hint { padding: 70px 0; text-align: center; }
+
+    /* ── 録音ミニオーバーレイ（右下） ── */
+    .rec-mini-overlay {
+      position: absolute;
+      bottom: 14px; right: 14px;
+      display: flex; align-items: center; gap: 8px;
+      background: rgba(15, 17, 23, 0.92);
+      border: 1px solid var(--border);
+      border-radius: 50px;
+      padding: 5px 14px 5px 10px;
+      backdrop-filter: blur(10px);
+      z-index: 10;
+    }
+    #timer {
+      font-size: 1rem; font-weight: 700;
+      font-variant-numeric: tabular-nums;
+      color: var(--text); min-width: 44px; text-align: right;
+    }
+    #timer.rec { color: var(--red); }
+    #rec-btn {
+      width: 44px; height: 44px; border-radius: 50%; border: none; cursor: pointer;
+      font-size: 1.15rem; display: flex; align-items: center; justify-content: center;
+      background: linear-gradient(135deg,#6c63ff,#8b5cf6);
+      color: #fff; box-shadow: 0 4px 16px rgba(108,99,255,.4);
+      transition: transform .15s, box-shadow .15s; flex-shrink: 0;
+    }
+    #rec-btn:hover { transform: scale(1.07); }
+    #rec-btn:active { transform: scale(.95); }
+    #rec-btn.rec {
+      background: linear-gradient(135deg,#ef4444,#f97316);
+      box-shadow: 0 4px 16px rgba(239,68,68,.45);
+      animation: pulse 1.3s ease-in-out infinite;
+    }
+    @keyframes pulse {
+      0%,100% { box-shadow: 0 4px 16px rgba(239,68,68,.45); }
+      50%      { box-shadow: 0 4px 28px rgba(239,68,68,.7), 0 0 0 8px rgba(239,68,68,.1); }
+    }
+
+    /* ── メインコンテンツエリア ── */
+    .content-area { width:100%; max-width:960px; margin:16px 20px 0; }
+
+    .main-tabs {
+      display:flex; border-bottom: 1px solid var(--border); margin-bottom: -1px;
+    }
+    .main-tab {
+      padding: 9px 20px; font-size:.85rem; font-weight:600;
+      background:none; border:none; border-bottom:2px solid transparent;
+      color:var(--muted); cursor:pointer; transition:color .15s;
+    }
+    .main-tab.active { color:var(--text); border-bottom-color:var(--accent); }
+    .main-tab:hover:not(.active) { color:var(--text); }
+
+    .main-panel {
+      background:var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 0 var(--radius) var(--radius) var(--radius);
+    }
+
+    /* ── ログパネル ── */
+    .log-header {
+      display:flex; align-items:center; justify-content:space-between;
+      padding:11px 16px; border-bottom:1px solid var(--border);
+    }
+    .log-title { font-size:.75rem; font-weight:600; color:var(--muted); text-transform:uppercase; letter-spacing:.06em; }
+    .log-header-right { display:flex; gap:10px; align-items:center; }
+    .log-count { font-size:.72rem; color:var(--muted); }
+    .btn-text { background:none; border:none; color:var(--muted); font-size:.78rem; cursor:pointer; padding:3px 7px; border-radius:4px; }
+    .btn-text:hover { background:var(--surface2); color:var(--text); }
+    .log-body { max-height:400px; overflow-y:auto; }
+    .log-entry { padding:11px 16px; border-bottom:1px solid var(--border); }
+    .log-entry:last-child { border-bottom:none; }
+    .log-entry.hi { background:rgba(108,99,255,.06); }
+    .log-meta { display:flex; gap:8px; align-items:center; margin-bottom:4px; }
+    .log-time { font-size:.72rem; font-family:monospace; color:var(--muted); }
+    .log-sz   { font-size:.68rem; color:var(--muted); background:var(--surface2); padding:1px 6px; border-radius:100px; }
+    .log-txt  { font-size:.87rem; line-height:1.6; word-break:break-word; white-space:pre-wrap; }
+    .log-txt.err { color:#f87171; }
+    .log-placeholder { padding:32px 16px; text-align:center; color:var(--muted); font-size:.87rem; }
+
+    /* ── アイデアマップ: タイトル入力 ── */
+    .meeting-title-wrap { padding: 14px 16px 12px; border-bottom: 1px solid var(--border); }
+    .meeting-title-input {
+      width: 100%; padding: 10px 14px;
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 8px; color: var(--text);
+      font-size: .95rem; font-weight: 600; outline: none;
+      transition: border-color .15s;
+    }
+    .meeting-title-input:focus { border-color: var(--accent); }
+    .meeting-title-input::placeholder { color: var(--muted); font-weight: 400; }
+
+    /* ── アイデアマップ: ヘッダー（抽出ボタン等） ── */
+    .idea-header {
+      display:flex; align-items:center; justify-content:space-between;
+      padding:10px 16px; border-bottom:1px solid var(--border); gap:10px; flex-wrap:wrap;
+    }
+    .idea-header-left { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+    .btn-extract {
+      padding:6px 14px; border-radius:8px; border:none; cursor:pointer;
+      background:linear-gradient(135deg,#6c63ff,#8b5cf6);
+      color:#fff; font-size:.8rem; font-weight:600; transition:opacity .15s;
+    }
+    .btn-extract:disabled { opacity:.5; cursor:default; }
+    .extract-status { font-size:.77rem; color:var(--muted); }
+    .idea-stats-badge { font-size:.72rem; color:var(--muted); background:var(--surface2); padding:3px 10px; border-radius:100px; }
+
+    /* ── アイデアサブタブ ── */
+    .idea-tabs {
+      display:flex; gap:2px; padding:9px 14px 0;
+      border-bottom:1px solid var(--border); overflow-x:auto;
+    }
+    .idea-tab {
+      padding:6px 12px; font-size:.77rem; font-weight:600; white-space:nowrap;
+      background:none; border:none; border-bottom:2px solid transparent;
+      color:var(--muted); cursor:pointer; border-radius:6px 6px 0 0; transition:color .15s;
+    }
+    .idea-tab.active { color:var(--text); border-bottom-color:var(--accent); }
+    .idea-tab:hover:not(.active) { color:var(--text); background:rgba(255,255,255,.04); }
+
+    .idea-panel { display:none; padding:14px; }
+    .idea-panel.active { display:block; }
+
+    /* ── カードグリッド ── */
+    .filter-bar { display:flex; gap:7px; flex-wrap:wrap; margin-bottom:12px; align-items:center; }
+    .filter-btn {
+      padding:3px 11px; border-radius:100px; border:none; cursor:pointer;
+      font-size:.73rem; font-weight:600;
+      background:var(--surface2); color:var(--muted); transition:all .15s;
+    }
+    .filter-btn.active { background:var(--accent); color:#fff; }
+    .search-input {
+      padding:4px 10px; border-radius:7px; border:1px solid var(--border);
+      background:var(--surface2); color:var(--text); font-size:.76rem;
+      outline:none; margin-left:auto;
+    }
+    .search-input:focus { border-color:var(--accent); }
+    .card-grid {
+      display:grid; grid-template-columns:repeat(auto-fill,minmax(195px,1fr)); gap:10px;
+    }
+    .idea-card {
+      background:var(--surface2); border:1px solid; border-radius:10px;
+      padding:11px; display:flex; flex-direction:column; gap:5px;
+    }
+    .ic-cat { font-size:.67rem; font-weight:700; padding:2px 8px; border-radius:100px; display:inline-block; width:fit-content; }
+    .ic-title { font-size:.86rem; font-weight:700; line-height:1.3; }
+    .ic-body  { font-size:.77rem; color:var(--muted); line-height:1.4; flex:1; }
+    .ic-tags  { display:flex; gap:4px; flex-wrap:wrap; }
+    .ic-tag   { font-size:.64rem; color:var(--muted); background:var(--surface); padding:2px 6px; border-radius:100px; }
+    .ic-status { font-size:.64rem; padding:2px 7px; border-radius:100px; background:var(--surface); color:var(--muted); width:fit-content; }
+    .empty-hint { color:var(--muted); font-size:.87rem; text-align:center; padding:36px 0; }
+
+    /* ── 課題ツリー ── */
+    .tree-wrap { overflow:auto; max-height:460px; }
+    .tree-root { padding-left:0; }
+    .tree-node { display:flex; align-items:center; gap:7px; padding:5px 8px; margin:2px 0; border-radius:6px; font-size:.83rem; }
+    .tree-node.root-node { font-weight:700; font-size:.92rem; background:rgba(108,99,255,.14); border:1px solid rgba(108,99,255,.28); }
+    .tree-node.cat-node  { font-weight:600; font-size:.8rem; }
+    .tree-node.leaf-node { font-size:.78rem; color:var(--muted); }
+    .tree-dot { width:7px; height:7px; border-radius:50%; flex-shrink:0; }
+    .tree-children { padding-left:22px; border-left:1px solid var(--border); margin-left:14px; }
+
+    /* ── 比較表 ── */
+    .compare-wrap { overflow:auto; }
+    .compare-table { width:100%; border-collapse:collapse; font-size:.8rem; }
+    .compare-table th { padding:9px 13px; text-align:left; font-size:.7rem; font-weight:600; color:var(--muted); text-transform:uppercase; letter-spacing:.05em; border-bottom:1px solid var(--border); }
+    .compare-table td { padding:9px 13px; border-bottom:1px solid var(--border); }
+    .compare-table tr:last-child td { border-bottom:none; }
+    .dots  { color:var(--accent); letter-spacing:2px; }
+    .stars { color:#fbbf24; }
+    .cat-badge { display:inline-block; padding:3px 9px; border-radius:100px; font-size:.73rem; font-weight:600; }
+
+    /* ── かんばん ── */
+    .kanban-wrap { display:grid; grid-template-columns:repeat(4,1fr); gap:9px; min-height:260px; }
+    .kanban-col { background:var(--surface2); border-radius:9px; padding:9px; min-height:180px; display:flex; flex-direction:column; gap:7px; }
+    .kanban-col-title { font-size:.73rem; font-weight:700; text-transform:uppercase; letter-spacing:.06em; padding:3px 3px 7px; border-bottom:2px solid; margin-bottom:1px; }
+    .kcard { background:var(--surface); border:1px solid var(--border); border-radius:7px; padding:8px; cursor:grab; font-size:.78rem; }
+    .kcard:active { cursor:grabbing; }
+    .kcard-title { font-weight:600; margin-bottom:3px; }
+    .kcard-cat   { font-size:.67rem; padding:1px 6px; border-radius:100px; display:inline-block; margin-top:2px; }
+    .kanban-col.drag-target { background:rgba(108,99,255,.1); border:1px dashed var(--accent); }
+
+    /* ── ロードマップ ── */
+    .roadmap-wrap { display:flex; gap:0; align-items:stretch; overflow-x:auto; padding:4px 0; }
+    .phase { flex:1; min-width:170px; background:var(--surface2); border-radius:9px; padding:12px; display:flex; flex-direction:column; gap:7px; position:relative; }
+    .phase + .phase { margin-left:7px; }
+    .phase::after { content:'→'; position:absolute; right:-13px; top:50%; transform:translateY(-50%); font-size:1.3rem; color:var(--muted); z-index:1; }
+    .phase:last-child::after { display:none; }
+    .phase-label { font-size:.7rem; font-weight:700; text-transform:uppercase; letter-spacing:.06em; padding:4px 10px; border-radius:100px; text-align:center; color:#fff; }
+    .phase-items { display:flex; flex-direction:column; gap:5px; }
+    .phase-item { background:var(--surface); border-radius:6px; padding:7px; font-size:.76rem; }
+    .phase-item-title { font-weight:600; margin-bottom:2px; }
+    .phase-item-ideas { font-size:.7rem; color:var(--muted); }
+
+    /* ── スクロールバー ── */
+    ::-webkit-scrollbar { width:5px; height:5px; }
+    ::-webkit-scrollbar-track { background:transparent; }
+    ::-webkit-scrollbar-thumb { background:var(--border); border-radius:3px; }
+
+    @media (max-width:600px) {
+      .kanban-wrap { grid-template-columns:repeat(2,1fr); }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>🎙 音声文字起こし + アイデアマップ</h1>
+  <div class="header-right">
+    <span id="proc-badge" class="proc-badge" style="display:none">⚙ 処理中 0件</span>
+    <span id="api-status" class="badge badge-gray">待機中</span>
+  </div>
+</header>
+
+<!-- メインマインドマップカード（録音コントロール内包） -->
+<div class="mindmap-main-card">
+  <div class="mindmap-main-header">
+    <span class="mindmap-main-label">🧠 アイデアマップ（常時表示）</span>
+    <span id="status-text">🎤 ボタンを押して録音を開始してください</span>
+  </div>
+  <div id="mindmap-main-inner">
+    <div class="empty-hint">録音・アイデア抽出後にマインドマップが表示されます</div>
+  </div>
+  <!-- 録音ミニコントロール（右下オーバーレイ） -->
+  <div class="rec-mini-overlay">
+    <span id="timer">0:00</span>
+    <button id="rec-btn" title="録音開始">
+      <span id="btn-icon">🎤</span>
+    </button>
+  </div>
+</div>
+
+<!-- メインコンテンツ -->
+<div class="content-area">
+
+  <!-- メインタブ -->
+  <div class="main-tabs">
+    <button class="main-tab active" data-tab="log">📝 議事録ログ</button>
+    <button class="main-tab" data-tab="ideamap">🧠 アイデアマップ</button>
+  </div>
+
+  <!-- ── ログパネル ── -->
+  <div id="panel-log" class="main-panel">
+    <div class="log-header">
+      <span class="log-title">直近ログ</span>
+      <div class="log-header-right">
+        <span id="log-count" class="log-count">0 件</span>
+        <button id="btn-clear" class="btn-text">クリア</button>
+      </div>
+    </div>
+    <div id="log-body" class="log-body">
+      <div class="log-placeholder" id="log-placeholder">録音が完了すると、ここに文字起こし結果が表示されます</div>
+    </div>
+  </div>
+
+  <!-- ── アイデアマップパネル ── -->
+  <div id="panel-ideamap" class="main-panel" style="display:none">
+
+    <!-- ① タイトル入力 -->
+    <div class="meeting-title-wrap">
+      <input id="meeting-title" class="meeting-title-input"
+        placeholder="📌 会議タイトルを入力（例：2025/02 週次MTG）" />
+    </div>
+
+    <!-- ② 抽出ボタン・ステータス -->
+    <div class="idea-header">
+      <div class="idea-header-left">
+        <button id="btn-extract" class="btn-extract" disabled>🔍 アイデアを抽出</button>
+        <span id="extract-status" class="extract-status">文字起こし後に自動抽出されます</span>
+      </div>
+      <span id="idea-stats" class="idea-stats-badge">0 件 / 0 トピック</span>
+    </div>
+
+    <!-- ③ サブタブ（Cards / Tree / Compare / Kanban / Roadmap） -->
+    <div class="idea-tabs">
+      <button class="idea-tab active" data-view="cards">⊞ カード</button>
+      <button class="idea-tab" data-view="tree">🌳 課題ツリー</button>
+      <button class="idea-tab" data-view="compare">📊 比較表</button>
+      <button class="idea-tab" data-view="kanban">📋 かんばん</button>
+      <button class="idea-tab" data-view="roadmap">🚀 ロードマップ</button>
+    </div>
+
+    <div id="view-cards"   class="idea-panel active"><div class="empty-hint">アイデアを抽出すると表示されます</div></div>
+    <div id="view-tree"    class="idea-panel"><div class="empty-hint">アイデアを抽出すると表示されます</div></div>
+    <div id="view-compare" class="idea-panel"><div class="empty-hint">アイデアを抽出すると表示されます</div></div>
+    <div id="view-kanban"  class="idea-panel"><div class="empty-hint">アイデアを抽出すると表示されます</div></div>
+    <div id="view-roadmap" class="idea-panel"><div class="empty-hint">アイデアを抽出すると表示されます</div></div>
+
+  </div><!-- /panel-ideamap -->
+
+</div><!-- /content-area -->
+
+<script src="/static/app.js"></script>
+</body>
+</html>
