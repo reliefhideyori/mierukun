@@ -3,11 +3,17 @@
 // ============================================================
 // 定数
 // ============================================================
-const CAT_COLORS = ['#4f7eff','#ff6b6b','#38d9a9','#ffc233','#a97dff','#ff9a3c'];
-const CAT_LIGHT  = [
-  'rgba(79,126,255,.14)','rgba(255,107,107,.14)','rgba(56,217,169,.14)',
-  'rgba(255,194,51,.17)','rgba(169,125,255,.14)','rgba(255,154,60,.14)',
+
+// 会議で使う固定カテゴリ 6種（バックエンドのプロンプトと完全一致させること）
+const MEETING_CATS = [
+  { key: 'アイデア',           icon: '💡', color: '#4f7eff', light: 'rgba(79,126,255,.13)' },
+  { key: 'リスク',             icon: '⚠️', color: '#ff6b6b', light: 'rgba(255,107,107,.13)' },
+  { key: '検討すべきこと',     icon: '🤔', color: '#ffc233', light: 'rgba(255,194,51,.15)'  },
+  { key: '決定事項',           icon: '✅', color: '#38d9a9', light: 'rgba(56,217,169,.13)'  },
+  { key: 'アクションアイテム', icon: '📋', color: '#a97dff', light: 'rgba(169,125,255,.13)' },
+  { key: '意見・フィードバック', icon: '💬', color: '#ff9a3c', light: 'rgba(255,154,60,.13)'  },
 ];
+
 const STATUS_LABELS = { todo:'To Do', doing:'Doing', blocked:'Blocked', done:'Done' };
 const STATUS_COLORS = { todo:'#4f7eff', doing:'#38d9a9', blocked:'#ff6b6b', done:'#ffc233' };
 
@@ -20,9 +26,9 @@ const CHUNK_INTERVAL_MS = 60_000;
 let mediaRecorder  = null;
 let audioChunks    = [];
 let timerInterval  = null;
-let chunkTimer     = null;   // 定期チャンク送信タイマー
-let activeStream   = null;   // マイクストリーム（チャンク間で維持）
-let chunkCount     = 0;      // 送信済みチャンク数
+let chunkTimer     = null;
+let activeStream   = null;
+let chunkCount     = 0;
 let startTime      = null;
 let isRecording    = false;
 let logCount       = 0;
@@ -79,7 +85,7 @@ document.querySelectorAll('.idea-tab').forEach(btn => {
 });
 
 elTitleInput.addEventListener('input', () => {
-  if (allIdeas.length > 0) renderMindMap();
+  if (allIdeas.length > 0) renderWhiteboard();
 });
 
 // ============================================================
@@ -99,7 +105,7 @@ function updateProcBadge() {
 }
 
 // ============================================================
-// 録音開始（ローリング録音：ストリームを維持しチャンクを定期送信）
+// 録音開始（ローリング録音）
 // ============================================================
 async function startRecording() {
   if (isRecording) return;
@@ -123,16 +129,15 @@ async function startRecording() {
   setStatus('🔴 録音中… 1分ごとに自動で文字起こしされます');
   setApiStatus('録音中', 'green');
 
-  startChunk();  // 最初のチャンク録音を開始
+  startChunk();
 
-  // CHUNK_INTERVAL_MS ごとにチャンクをロール（送信して次を開始）
   chunkTimer = setInterval(() => {
     if (isRecording) rollChunk();
   }, CHUNK_INTERVAL_MS);
 }
 
 // ============================================================
-// チャンク録音開始（ストリームを引き継いで新しい MediaRecorder を作成）
+// チャンク録音（ストリームを引き継いで新しい MediaRecorder を作成）
 // ============================================================
 function startChunk() {
   audioChunks = [];
@@ -143,13 +148,11 @@ function startChunk() {
   mediaRecorder.ondataavailable = e => { if (e.data.size > 0) audioChunks.push(e.data); };
   mediaRecorder.onstop = () => {
     const blob = new Blob(audioChunks, { type: mediaRecorder.mimeType || 'audio/webm' });
-    sendAudio(blob);  // バックグラウンド処理（録音をブロックしない）
+    sendAudio(blob);
 
     if (isRecording) {
-      // まだ録音中 → 同じストリームで次のチャンクを即座に開始
       startChunk();
     } else {
-      // 停止操作済み → ストリームを解放
       if (activeStream) {
         activeStream.getTracks().forEach(t => t.stop());
         activeStream = null;
@@ -160,19 +163,16 @@ function startChunk() {
   mediaRecorder.start(1000);
 }
 
-// ============================================================
-// チャンクのロール（現チャンクを止めて送信 → onstop が次チャンクを開始）
-// ============================================================
 function rollChunk() {
   chunkCount++;
   setStatus(`🔄 第${chunkCount}チャンクを文字起こし中… 録音は継続中`);
   if (mediaRecorder && mediaRecorder.state !== 'inactive') {
-    mediaRecorder.stop();  // onstop → sendAudio + startChunk
+    mediaRecorder.stop();
   }
 }
 
 // ============================================================
-// 録音停止（■ボタン押下時）
+// 録音停止
 // ============================================================
 function stopRecording() {
   if (!isRecording) return;
@@ -183,7 +183,6 @@ function stopRecording() {
   timerInterval = null;
   chunkTimer    = null;
 
-  // 現在のチャンクを停止（onstop が最終チャンクを送信しストリームも解放する）
   if (mediaRecorder && mediaRecorder.state !== 'inactive') {
     mediaRecorder.stop();
   } else if (activeStream) {
@@ -196,7 +195,7 @@ function stopRecording() {
 }
 
 // ============================================================
-// 文字起こし送信（バックグラウンド・録音をブロックしない）
+// 文字起こし送信（バックグラウンド・非ブロッキング）
 // ============================================================
 async function sendAudio(blob) {
   if (blob.size < 1000) return;
@@ -218,7 +217,6 @@ async function sendAudio(blob) {
     elBtnExtract.disabled = false;
     extractIdeas(data.text, getMeetingTitle());
 
-    // 文字起こし完了後も録音中なら録音中ステータスに戻す
     if (isRecording) setStatus('🔴 録音中… 1分ごとに自動で文字起こしされます');
 
   } catch (e) {
@@ -230,7 +228,7 @@ async function sendAudio(blob) {
 }
 
 // ============================================================
-// アイデア抽出（タイトル + 文字起こしテキスト）
+// アイデア抽出（タイトル + 文字起こし）
 // ============================================================
 async function extractIdeas(text, title = '') {
   if (!text || !text.trim()) return;
@@ -251,13 +249,15 @@ async function extractIdeas(text, title = '') {
     }
     const data = await res.json();
     if (data.ideas && data.ideas.length > 0) {
-      const existingIds = new Set(allIdeas.map(i => i.id));
-      const newIdeas    = data.ideas.filter(i => !existingIds.has(i.id));
+      // タイトルベースで重複排除（IDはリクエストごとに変わるため使わない）
+      const existingTitles = new Set(allIdeas.map(i => i.title.trim()));
+      const newIdeas = data.ideas.filter(i => !existingTitles.has((i.title || '').trim()));
       allIdeas = [...allIdeas, ...newIdeas];
+
       updateIdeaStats();
-      renderMindMap();
+      renderWhiteboard();
       renderCurrentIdeaView();
-      elExtractSt.textContent = `✓ ${data.ideas.length} 件抽出しました`;
+      elExtractSt.textContent = `✓ ${newIdeas.length} 件追加（合計 ${allIdeas.length} 件）`;
 
       const ideaTabBtn = document.querySelector('[data-tab="ideamap"]');
       if (activeMainTab !== 'ideamap') {
@@ -276,7 +276,7 @@ async function extractIdeas(text, title = '') {
 }
 
 // ============================================================
-// タイマーUI（経過時間を表示・制限なし）
+// タイマーUI
 // ============================================================
 function startTimerUI() {
   timerInterval = setInterval(() => {
@@ -306,11 +306,31 @@ function setApiStatus(txt, color) {
   elApiSt.className   = `badge badge-${color}`;
 }
 function updateIdeaStats() {
-  const topics = [...new Set(allIdeas.map(i => i.category))];
-  elIdeaStats.textContent = `${allIdeas.length} 件 / ${topics.length} トピック`;
+  const nonEmpty = MEETING_CATS.filter(c => allIdeas.some(i => i.category === c.key));
+  elIdeaStats.textContent = `${allIdeas.length} 件 / ${nonEmpty.length} カテゴリ`;
 }
 function getMeetingTitle() {
   return elTitleInput.value.trim() || '会議メモ';
+}
+
+// ============================================================
+// カテゴリ色（固定カテゴリ優先、その他はフォールバック）
+// ============================================================
+const CAT_COLORS_FB = ['#4f7eff','#ff6b6b','#38d9a9','#ffc233','#a97dff','#ff9a3c'];
+const CAT_LIGHT_FB  = [
+  'rgba(79,126,255,.14)','rgba(255,107,107,.14)','rgba(56,217,169,.14)',
+  'rgba(255,194,51,.17)','rgba(169,125,255,.14)','rgba(255,154,60,.14)',
+];
+function getCats() { return [...new Set(allIdeas.map(i => i.category))]; }
+function catColor(cat) {
+  const mc = MEETING_CATS.find(c => c.key === cat);
+  if (mc) return mc.color;
+  return CAT_COLORS_FB[getCats().indexOf(cat) % 6];
+}
+function catColorLight(cat) {
+  const mc = MEETING_CATS.find(c => c.key === cat);
+  if (mc) return mc.light;
+  return CAT_LIGHT_FB[getCats().indexOf(cat) % 6];
 }
 
 // ============================================================
@@ -341,13 +361,6 @@ function escHtml(s) {
 }
 
 // ============================================================
-// カテゴリ（トピック）色
-// ============================================================
-function getCats() { return [...new Set(allIdeas.map(i => i.category))]; }
-function catColor(cat)      { return CAT_COLORS[getCats().indexOf(cat) % 6]; }
-function catColorLight(cat) { return CAT_LIGHT[getCats().indexOf(cat) % 6]; }
-
-// ============================================================
 // アイデアビュー切替
 // ============================================================
 function renderCurrentIdeaView() {
@@ -361,84 +374,39 @@ function renderCurrentIdeaView() {
 }
 
 // ============================================================
-// マインドマップ SVG（トピックベース・全ノードが viewBox 内に収まる）
-//
-// viewBox: 0 0 960 420
-// 中心: CX=480, CY=210
-// カテゴリノード距離: R_CAT=90  → 範囲: 210±90+ノード高さ(18) = 102〜318 ✓
-// リーフノード距離:   R_LEAF=165 → 範囲: 210±165+矩形高さ(14) = 31〜389 ✓
-//                                  横: 480±165+矩形半幅(36) = 279〜681 ✓
+// ホワイトボード（6固定カテゴリ × エリア表示）
 // ============================================================
-function renderMindMap() {
+function renderWhiteboard() {
   const container = document.getElementById('mindmap-main-inner');
-  const topics    = getCats();
-  const title     = getMeetingTitle();
 
   if (allIdeas.length === 0) {
-    container.innerHTML = '<div class="empty-hint">録音・アイデア抽出後にマインドマップが表示されます</div>';
+    container.innerHTML = '<div class="empty-hint">録音・アイデア抽出後にホワイトボードが表示されます</div>';
     return;
   }
 
-  const SVG_W  = 960, SVG_H = 420;
-  const CX     = 480, CY   = 210;
-  const R_CAT  = 90;            // 中心〜トピックノードの距離
-  const R_LEAF = 165;           // 中心〜リーフノードの距離
-  const LW     = 72;            // リーフ矩形の幅
-  const LH     = 28;            // リーフ矩形の高さ
+  const sections = MEETING_CATS.map(cat => {
+    const ideas = allIdeas.filter(i => i.category === cat.key);
 
-  let lines = '', catNodes = '', leafNodes = '';
+    const cards = ideas.map(idea => `
+      <div class="wb-card" style="border-left-color:${cat.color}">
+        <div class="wb-card-title" style="color:${cat.color}">${escHtml(idea.title)}</div>
+        ${idea.body ? `<div class="wb-card-body">${escHtml(idea.body)}</div>` : ''}
+      </div>`).join('');
 
-  topics.forEach((topic, ci) => {
-    const angle      = (2 * Math.PI * ci / topics.length) - Math.PI / 2;
-    const cx         = CX + R_CAT * Math.cos(angle);
-    const cy         = CY + R_CAT * Math.sin(angle);
-    const color      = CAT_COLORS[ci % 6];
-    const topicIdeas = allIdeas.filter(i => i.category === topic).slice(0, 5);
-    const spread     = topicIdeas.length > 1 ? Math.PI / 2.6 : 0;
+    return `
+      <div class="wb-section">
+        <div class="wb-section-header" style="color:${cat.color}; border-bottom-color:${cat.color}; background:${cat.light}">
+          <span>${cat.icon}</span>
+          <span>${escHtml(cat.key)}</span>
+          ${ideas.length > 0 ? `<span class="wb-count" style="background:${cat.color}30">${ideas.length}</span>` : ''}
+        </div>
+        <div class="wb-section-body">
+          ${cards || '<div class="wb-empty">—</div>'}
+        </div>
+      </div>`;
+  }).join('');
 
-    // 中心 → トピックノードの線
-    lines += `<line x1="${CX}" y1="${CY}" x2="${cx.toFixed(1)}" y2="${cy.toFixed(1)}"
-      stroke="${color}" stroke-width="2" stroke-opacity=".55"/>`;
-
-    // リーフノード（アイデア）
-    topicIdeas.forEach((idea, ii) => {
-      const lAngle = angle - spread / 2 + (topicIdeas.length > 1 ? spread * ii / (topicIdeas.length - 1) : 0);
-      const lx = CX + R_LEAF * Math.cos(lAngle);
-      const ly = CY + R_LEAF * Math.sin(lAngle);
-      const t  = idea.title.length > 9 ? idea.title.slice(0, 9) + '…' : idea.title;
-
-      lines += `<line x1="${cx.toFixed(1)}" y1="${cy.toFixed(1)}" x2="${lx.toFixed(1)}" y2="${ly.toFixed(1)}"
-        stroke="${color}" stroke-width="1.1" stroke-opacity=".32"/>`;
-      leafNodes += `
-        <rect x="${(lx - LW/2).toFixed(1)}" y="${(ly - LH/2).toFixed(1)}" width="${LW}" height="${LH}" rx="5"
-          fill="${color}20" stroke="${color}" stroke-width="1"/>
-        <text x="${lx.toFixed(1)}" y="${(ly + 4).toFixed(1)}" text-anchor="middle"
-          font-size="10" fill="${color}" font-family="sans-serif">${escSVG(t)}</text>`;
-    });
-
-    // トピックノード（楕円・テキスト長に応じた幅）
-    const cLabel = topic.length > 8 ? topic.slice(0, 8) + '…' : topic;
-    const rx     = Math.min(Math.max(26, cLabel.length * 5.8 + 6), 52);
-    catNodes += `
-      <ellipse cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" rx="${rx}" ry="17"
-        fill="${color}" fill-opacity=".9"/>
-      <text x="${cx.toFixed(1)}" y="${(cy + 4).toFixed(1)}" text-anchor="middle"
-        font-size="10" fill="white" font-weight="bold" font-family="sans-serif">${escSVG(cLabel)}</text>`;
-  });
-
-  container.innerHTML = `<svg viewBox="0 0 ${SVG_W} ${SVG_H}" xmlns="http://www.w3.org/2000/svg">
-    <defs>
-      <radialGradient id="cg"><stop offset="0%" stop-color="#8b5cf6"/><stop offset="100%" stop-color="#6c63ff"/></radialGradient>
-    </defs>
-    ${lines}${leafNodes}${catNodes}
-    <circle cx="${CX}" cy="${CY}" r="46" fill="url(#cg)"/>
-    <text x="${CX}" y="${CY - 7}" text-anchor="middle" font-size="11" fill="white" font-weight="bold" font-family="sans-serif">${escSVG(title.length > 13 ? title.slice(0,13)+'…' : title)}</text>
-    <text x="${CX}" y="${CY + 10}" text-anchor="middle" font-size="9.5" fill="rgba(255,255,255,.65)" font-family="sans-serif">${allIdeas.length}件 / ${topics.length}トピック</text>
-  </svg>`;
-}
-
-function escSVG(s) {
-  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  container.innerHTML = `<div class="whiteboard">${sections}</div>`;
 }
 
 // ============================================================
@@ -544,7 +512,7 @@ function renderCompare() {
   el.innerHTML = `<div style="font-size:.8rem;color:var(--muted);margin-bottom:8px">📋 ${escHtml(title)}</div>
     <div class="compare-wrap">
       <table class="compare-table">
-        <thead><tr><th>トピック</th><th>件数</th><th>充実度</th><th>多様性</th><th>総合評価</th></tr></thead>
+        <thead><tr><th>カテゴリ</th><th>件数</th><th>充実度</th><th>多様性</th><th>総合評価</th></tr></thead>
         <tbody>${rows}</tbody>
       </table>
     </div>`;
