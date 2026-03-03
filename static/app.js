@@ -4,9 +4,9 @@
 // 定数
 // ============================================================
 const MEETING_CATS = [
-  { key: 'アイデア', icon: '💡', color: '#4f7eff', light: 'rgba(79,126,255,.13)' },
-  { key: 'リスク',   icon: '⚠️', color: '#ff6b6b', light: 'rgba(255,107,107,.13)' },
-  { key: '意見',     icon: '💬', color: '#ff9a3c', light: 'rgba(255,154,60,.13)'  },
+  { key: 'アイデア', color: '#5b8fff', light: 'rgba(91,143,255,.1)'  },
+  { key: 'リスク',   color: '#ff5f5f', light: 'rgba(255,95,95,.1)'   },
+  { key: '意見',     color: '#ff9040', light: 'rgba(255,144,64,.1)'  },
 ];
 const CHUNK_INTERVAL_MS = 60_000;
 
@@ -427,10 +427,10 @@ function renderWhiteboard() {
     return;
   }
 
-  // 1枚のカードを HTML 文字列に変換
+  // 1枚のカードを HTML 文字列に変換（タイトルは白固定 – カテゴリ色は左ボーダーのみ）
   const cardHtml = (idea, idx, color) => `
     <div class="wb-card" draggable="true" data-idx="${idx}" style="border-left-color:${color}">
-      <div class="wb-card-title" style="color:${color}">${escHtml(idea.title)}</div>
+      <div class="wb-card-title">${escHtml(idea.title)}</div>
       ${idea.body ? `<div class="wb-card-body">${escHtml(idea.body)}</div>` : ''}
       <button class="wb-card-delete" data-idx="${idx}" title="削除">✕</button>
     </div>`;
@@ -456,22 +456,23 @@ function renderWhiteboard() {
 
     const bodyContent = items.map(item => {
       if (item.type === 'card') return cardHtml(item.idea, item.idx, cat.color);
-      // グループ
+      // グループ（明確な色付きヘッダーバー + 枠線でグルーピングを可視化）
       const inner = item.cards.map(c => cardHtml(c.idea, c.idx, cat.color)).join('');
       return `
-        <div class="wb-group">
-          <button class="wb-group-ungroup" data-gid="${escAttr(item.gid)}" title="グループ解除">解除</button>
-          ${inner}
+        <div class="wb-group" style="border-color:${cat.color}50; background:${cat.color}08">
+          <div class="wb-group-header" style="background:${cat.color}1a; border-bottom:1px solid ${cat.color}30">
+            <span class="wb-group-label" style="color:${cat.color}cc">グループ &nbsp;${item.cards.length}</span>
+            <button class="wb-group-ungroup" data-gid="${escAttr(item.gid)}">解除</button>
+          </div>
+          <div class="wb-group-cards">${inner}</div>
         </div>`;
     }).join('');
 
     return `
       <div class="wb-section">
-        <div class="wb-section-header"
-             style="color:${cat.color}; border-bottom-color:${cat.color}; background:${cat.light}">
-          <span>${cat.icon}</span>
-          <span>${escHtml(cat.key)}</span>
-          ${ideas.length > 0 ? `<span class="wb-count" style="background:${cat.color}30">${ideas.length}</span>` : ''}
+        <div class="wb-section-header" style="background:${cat.light}">
+          <span class="wb-section-title" style="color:${cat.color}">${escHtml(cat.key)}</span>
+          ${ideas.length > 0 ? `<span class="wb-count">${ideas.length}</span>` : ''}
         </div>
         <div class="wb-section-body" data-cat="${escAttr(cat.key)}">
           ${bodyContent || '<div class="wb-empty">—</div>'}
