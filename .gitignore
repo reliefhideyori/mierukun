@@ -1,26 +1,18 @@
-# 環境変数（APIキーを含むため絶対にコミットしない）
+# 環境変数・シークレット
 .env
-*.env
+*.json
+
+# データベース
+*.db
+*.sqlite
 
 # Python
 __pycache__/
 *.py[cod]
-*.pyo
-.pytest_cache/
-
-# 仮想環境
-venv/
 .venv/
+venv/
 env/
 
 # OS
 .DS_Store
 Thumbs.db
-
-# IDE
-.idea/
-.vscode/
-*.swp
-
-# Claude
-.claude/

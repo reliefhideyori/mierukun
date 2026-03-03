@@ -1,6 +1,5 @@
 """
-音声文字起こし + アイデアマップ統合ツール
-1分録音 → Gemini API 文字起こし → アイデア抽出 → 6ビュー可視化
+ZONIST – 音声文字起こし + アイデアマップ統合ツール
 """
 import asyncio
 import json
@@ -9,11 +8,13 @@ import re
 import tempfile
 from pathlib import Path
 
-from fastapi import FastAPI, File, HTTPException, Request, UploadFile
+from fastapi import FastAPI, File, HTTPException, Request, UploadFile, Depends
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.middleware.sessions import SessionMiddleware
 from dotenv import load_dotenv
 from google import genai
+from sqlalchemy.orm import Session
 
 load_dotenv()
 
@@ -28,17 +29,84 @@ else:
     _client = None
     print("\n[WARNING] GEMINI_API_KEY が未設定です。.env ファイルを確認してください。\n")
 
+# ===================== DB 初期化 =====================
+from database import engine, get_db
+from models import Base, User, RecordingSession
+Base.metadata.create_all(bind=engine)
+
+# ===================== FastAPI =====================
+app = FastAPI(title="ZONIST")
+
+# セッションミドルウェア（OAuth state 管理に必要）
+app.add_middleware(
+    SessionMiddleware,
+    secret_key=os.getenv("JWT_SECRET", "change_me_in_production_32chars!!"),
+)
+
+app.mount("/static", StaticFiles(directory="static"), name="static")
+
+# ===================== 認証 / Stripe ルーター =====================
+from auth import router as auth_router, get_current_user
+from stripe_routes import router as stripe_router
+
+app.include_router(auth_router)
+app.include_router(stripe_router)
+
+# ===================== ページルート =====================
+@app.get("/")
+async def lp():
+    return FileResponse("static/lp.html")
+
+
+@app.get("/login")
+async def login_page():
+    return FileResponse("static/login.html")
+
+
+@app.get("/app")
+async def app_page():
+    return FileResponse("static/index.html")
+
+
+# ===================== セッション管理 =====================
+FREE_SESSION_LIMIT = 3
+
+
+@app.post("/session/start")
+async def session_start(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """録音開始前に呼ぶ。無料上限チェック + セッションカウント"""
+    if current_user.plan == "free" and current_user.sessions_used >= FREE_SESSION_LIMIT:
+        raise HTTPException(
+            status_code=402,
+            detail="無料セッションを使い切りました",
+        )
+    current_user.sessions_used += 1
+    new_session = RecordingSession(user_id=current_user.id)
+    db.add(new_session)
+    db.commit()
+    db.refresh(current_user)
+
+    remaining = (
+        max(0, FREE_SESSION_LIMIT - current_user.sessions_used)
+        if current_user.plan == "free"
+        else None
+    )
+    return {
+        "sessions_used":      current_user.sessions_used,
+        "sessions_remaining": remaining,
+    }
+
 
 # ===================== JSON パーサー（堅牢版） =====================
 def _parse_ideas_json(text: str) -> list:
-    """AIレスポンスから JSON 配列を堅牢に抽出"""
     text = re.sub(r'```json\s*', '', text, flags=re.IGNORECASE)
     text = re.sub(r'```\s*', '', text)
-
     start = text.find('[')
     if start == -1:
         return []
-
     depth, in_str, esc = 0, False, False
     for i in range(start, len(text)):
         ch = text[i]
@@ -63,19 +131,12 @@ def _parse_ideas_json(text: str) -> list:
     return []
 
 
-# ===================== FastAPI =====================
-app = FastAPI(title="音声文字起こし + アイデアマップ")
-app.mount("/static", StaticFiles(directory="static"), name="static")
-
-
-@app.get("/")
-async def index():
-    return FileResponse("static/index.html")
-
-
-# ── 音声文字起こし ──
+# ===================== 音声文字起こし =====================
 @app.post("/transcribe")
-async def transcribe(audio: UploadFile = File(...)):
+async def transcribe(
+    audio: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+):
     if not _api_key or _client is None:
         raise HTTPException(status_code=500, detail="GEMINI_API_KEY が設定されていません")
 
@@ -141,20 +202,22 @@ async def transcribe(audio: UploadFile = File(...)):
                 pass
 
 
-# ── アイデア抽出 ──
+# ===================== アイデア抽出 =====================
 @app.post("/extract-ideas")
-async def extract_ideas(req: Request):
+async def extract_ideas(
+    req: Request,
+    current_user: User = Depends(get_current_user),
+):
     if not _api_key or _client is None:
         raise HTTPException(status_code=500, detail="GEMINI_API_KEY が設定されていません")
 
-    body = await req.json()
+    body  = await req.json()
     text  = body.get("text", "").strip()
     title = body.get("title", "").strip()
     if not text:
         raise HTTPException(status_code=400, detail="テキストが空です")
 
     title_context = f"会議タイトル：{title}\n\n" if title else ""
-
     prompt = (
         "以下の会議情報から重要なアイデア・提案・意見・課題・決定事項・アクションアイテムをすべて抽出し、"
         "JSON配列のみ返してください。前後の説明文は一切不要です。\n\n"
@@ -177,7 +240,6 @@ async def extract_ideas(req: Request):
             contents=[prompt],
         )
         ideas = _parse_ideas_json(response.text.strip())
-        # id と status フィールドを付与
         for i, idea in enumerate(ideas):
             idea["id"] = f"idea_{i}_{id(idea)}"
             if "status" not in idea:
@@ -196,6 +258,6 @@ if __name__ == "__main__":
         print("  .env ファイルに GEMINI_API_KEY=your_key を設定してください。\n")
         exit(1)
 
-    print("\n音声文字起こし + アイデアマップ ツールを起動します…")
+    print("\nZONIST を起動します…")
     print("ブラウザで http://localhost:8001 を開いてください\n")
     uvicorn.run("main:app", host="0.0.0.0", port=8001, reload=False)

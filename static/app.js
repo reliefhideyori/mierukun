@@ -8,7 +8,9 @@ const MEETING_CATS = [
   { key: 'リスク',   color: '#ff5f5f', light: 'rgba(255,95,95,.1)'   },
   { key: '意見',     color: '#ff9040', light: 'rgba(255,144,64,.1)'  },
 ];
-const CHUNK_INTERVAL_MS = 60_000;
+const CHUNK_INTERVAL_MS  = 60_000;
+const FREE_SESSION_LIMIT = 3;
+const FREE_LIMIT_SEC     = 1800; // 30分
 
 // ============================================================
 // 状態
@@ -25,8 +27,14 @@ let logCount       = 0;
 let processingJobs = 0;
 let allIdeas       = [];
 let allTranscripts = '';
-let draggedIdx     = null;
-let groupNames     = {};   // groupId → カスタム名
+let draggedIdx        = null;
+let groupNames        = {};   // groupId → カスタム名
+let activeAddSection  = null; // 手動追加フォームが開いているカテゴリ
+
+// 認証 / セッション
+let currentUser        = null; // /auth/me のレスポンス
+let sessionTimerInterval = null;
+let sessionStartTime     = null;
 
 // ============================================================
 // DOM
@@ -68,6 +76,50 @@ function cleanupSingletonGroups() {
 // ホワイトボード: クリック委譲（削除 / グループ解除）
 // ============================================================
 elMainInner.addEventListener('click', e => {
+  // + ボタン → 追加フォームのトグル
+  const addBtn = e.target.closest('.wb-add-btn');
+  if (addBtn) {
+    const cat = addBtn.dataset.cat;
+    activeAddSection = activeAddSection === cat ? null : cat;
+    renderWhiteboard();
+    if (activeAddSection) {
+      const inp = elMainInner.querySelector('.wb-add-title');
+      if (inp) inp.focus();
+    }
+    return;
+  }
+
+  // フォーム: キャンセル
+  const cancelBtn = e.target.closest('.wb-add-cancel');
+  if (cancelBtn) {
+    activeAddSection = null;
+    renderWhiteboard();
+    return;
+  }
+
+  // フォーム: 追加実行
+  const submitBtn = e.target.closest('.wb-add-submit');
+  if (submitBtn) {
+    const cat    = submitBtn.dataset.cat;
+    const form   = submitBtn.closest('.wb-add-form');
+    const titleEl = form ? form.querySelector('.wb-add-title') : null;
+    const bodyEl  = form ? form.querySelector('.wb-add-body')  : null;
+    const title   = titleEl ? titleEl.value.trim() : '';
+    if (!title) { if (titleEl) { titleEl.focus(); titleEl.style.borderColor = 'var(--red)'; } return; }
+    const body = bodyEl ? bodyEl.value.trim() : '';
+    allIdeas.push({
+      id:       `idea_manual_${Date.now()}`,
+      title,
+      body,
+      category: cat,
+      tags:     [],
+      status:   'todo',
+    });
+    activeAddSection = null;
+    renderWhiteboard();
+    return;
+  }
+
   // カード削除
   const deleteBtn = e.target.closest('.wb-card-delete');
   if (deleteBtn) {
@@ -79,6 +131,7 @@ elMainInner.addEventListener('click', e => {
     }
     return;
   }
+
   // グループ解除
   const ungroupBtn = e.target.closest('.wb-group-ungroup');
   if (ungroupBtn) {
@@ -164,6 +217,30 @@ elMainInner.addEventListener('dblclick', e => {
     el.addEventListener('blur',  () => { blurTimer = setTimeout(save, 150); });
     el.addEventListener('focus', () => { clearTimeout(blurTimer); blurTimer = null; });
   });
+});
+
+// ============================================================
+// ホワイトボード: 追加フォーム キーボード操作
+// ============================================================
+elMainInner.addEventListener('keydown', e => {
+  const titleInput = e.target.closest('.wb-add-title');
+  if (titleInput) {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      const bodyInp = titleInput.closest('.wb-add-form')?.querySelector('.wb-add-body');
+      if (bodyInp) bodyInp.focus();
+    }
+    if (e.key === 'Escape') { activeAddSection = null; renderWhiteboard(); }
+    return;
+  }
+  const bodyInput = e.target.closest('.wb-add-body');
+  if (bodyInput) {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      bodyInput.closest('.wb-add-form')?.querySelector('.wb-add-submit')?.click();
+    }
+    if (e.key === 'Escape') { activeAddSection = null; renderWhiteboard(); }
+  }
 });
 
 // ============================================================
@@ -269,6 +346,11 @@ function updateProcBadge() {
 // ============================================================
 async function startRecording() {
   if (isRecording) return;
+
+  // セッション開始チェック（Free: 上限 / Paid: スキップ）
+  const ok = await callSessionStart();
+  if (!ok) return;
+
   let stream;
   try {
     stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -287,6 +369,7 @@ async function startRecording() {
   setApiStatus('録音中', 'green');
   startChunk();
   chunkTimer = setInterval(() => { if (isRecording) rollChunk(); }, CHUNK_INTERVAL_MS);
+  startFreeSessionTimer(); // Free: 30分タイマー
 }
 
 // ============================================================
@@ -326,6 +409,7 @@ function stopRecording() {
   clearInterval(chunkTimer);
   timerInterval = null;
   chunkTimer    = null;
+  stopFreeSessionTimer(); // 30分タイマーも停止
   if (mediaRecorder && mediaRecorder.state !== 'inactive') {
     mediaRecorder.stop();
   } else if (activeStream) {
@@ -451,11 +535,6 @@ function addLogEntry(text, size, isErr = false) {
 // ホワイトボード描画（グループ対応）
 // ============================================================
 function renderWhiteboard() {
-  if (allIdeas.length === 0) {
-    elMainInner.innerHTML = '<div class="empty-hint">録音・アイデア抽出後にホワイトボードが表示されます</div>';
-    return;
-  }
-
   // 1枚のカードを HTML 文字列に変換（タイトルは白固定 – カテゴリ色は左ボーダーのみ）
   const cardHtml = (idea, idx, color) => `
     <div class="wb-card" draggable="true" data-idx="${idx}" style="border-left-color:${color}">
@@ -465,7 +544,8 @@ function renderWhiteboard() {
     </div>`;
 
   const sections = MEETING_CATS.map(cat => {
-    const ideas = allIdeas.filter(i => i.category === cat.key);
+    const ideas    = allIdeas.filter(i => i.category === cat.key);
+    const isAdding = activeAddSection === cat.key;
 
     // ungrouped / grouped に整理
     const groupsMap = {};
@@ -497,14 +577,25 @@ function renderWhiteboard() {
         </div>`;
     }).join('');
 
+    // 追加フォーム（isAdding のときのみ）
+    const addForm = isAdding ? `
+      <div class="wb-add-form">
+        <input class="wb-add-title" placeholder="タイトル（15字以内）" maxlength="30" />
+        <textarea class="wb-add-body" placeholder="詳細（省略可）" rows="2" maxlength="100"></textarea>
+        <div class="wb-add-actions">
+          <button class="wb-add-cancel">キャンセル</button>
+          <button class="wb-add-submit" data-cat="${escAttr(cat.key)}">追加</button>
+        </div>
+      </div>` : '';
+
     return `
       <div class="wb-section">
         <div class="wb-section-header" style="background:${cat.light}">
           <span class="wb-section-title" style="color:${cat.color}">${escHtml(cat.key)}</span>
-          ${ideas.length > 0 ? `<span class="wb-count">${ideas.length}</span>` : ''}
+          <button class="wb-add-btn" data-cat="${escAttr(cat.key)}" title="${isAdding ? 'キャンセル' : 'カードを追加'}">${isAdding ? '✕' : '+'}</button>
         </div>
         <div class="wb-section-body" data-cat="${escAttr(cat.key)}">
-          ${bodyContent || '<div class="wb-empty">—</div>'}
+          ${addForm}${bodyContent || (!isAdding ? '<div class="wb-empty">—</div>' : '')}
         </div>
       </div>`;
   }).join('');
@@ -524,3 +615,180 @@ elBtnClear.addEventListener('click', () => {
   elLogCount.textContent = '0 件';
   elLogBody.innerHTML = '<div class="log-placeholder" id="log-placeholder">録音が完了すると、ここに文字起こし結果が表示されます</div>';
 });
+
+// ============================================================
+// 認証・ユーザー管理
+// ============================================================
+async function initAuth() {
+  try {
+    const res = await fetch('/auth/me');
+    if (res.status === 401) {
+      location.href = '/login';
+      return;
+    }
+    currentUser = await res.json();
+    renderUserMenu();
+    checkUpgradedParam();
+    renderWhiteboard(); // ログイン後にホワイトボードを描画
+  } catch (e) {
+    console.error('認証チェックエラー:', e);
+    location.href = '/login';
+  }
+}
+
+function renderUserMenu() {
+  if (!currentUser) return;
+  const dropdown = document.getElementById('user-dropdown');
+  const avatar   = document.getElementById('user-avatar');
+  const nameEl   = document.getElementById('user-name');
+  const badge    = document.getElementById('session-badge');
+  const btnUpgrade = document.getElementById('btn-upgrade-menu');
+
+  dropdown.style.display = '';
+  avatar.src = currentUser.avatar_url || '';
+  avatar.alt = currentUser.name || currentUser.email;
+  nameEl.textContent = currentUser.name || currentUser.email;
+
+  const quickBtn = document.getElementById('upgrade-quick-btn');
+  if (currentUser.plan === 'free') {
+    const rem = currentUser.sessions_remaining ?? 0;
+    badge.textContent = `残り ${rem} 回`;
+    badge.className   = `session-badge${rem <= 1 ? ' warn' : ''}`;
+    badge.style.display = '';
+    if (btnUpgrade) btnUpgrade.style.display = '';
+    if (quickBtn)   quickBtn.style.display   = '';
+  } else {
+    badge.style.display = 'none';
+    if (btnUpgrade) btnUpgrade.style.display = 'none';
+    if (quickBtn)   quickBtn.style.display   = 'none';
+  }
+
+  // ドロップダウン開閉
+  document.getElementById('user-menu-trigger').addEventListener('click', () => {
+    document.getElementById('user-dropdown-menu').classList.toggle('open');
+  });
+  document.addEventListener('click', e => {
+    if (!document.getElementById('user-dropdown').contains(e.target)) {
+      document.getElementById('user-dropdown-menu').classList.remove('open');
+    }
+  });
+
+  // ログアウト
+  document.getElementById('btn-logout').addEventListener('click', async () => {
+    await fetch('/auth/logout', { method: 'POST' });
+    location.href = '/login';
+  });
+
+  // アップグレードメニュー
+  if (btnUpgrade) {
+    btnUpgrade.addEventListener('click', () => {
+      document.getElementById('user-dropdown-menu').classList.remove('open');
+      goToStripe();
+    });
+  }
+}
+
+// ============================================================
+// セッション開始（録音開始前に呼ぶ）
+// ============================================================
+async function callSessionStart() {
+  try {
+    const res = await fetch('/session/start', { method: 'POST' });
+    if (res.status === 402) {
+      showUpgradeModal('sessions');
+      return false;
+    }
+    if (!res.ok) return false;
+    const data = await res.json();
+    // ユーザー情報を更新
+    if (currentUser) {
+      currentUser.sessions_used     = data.sessions_used;
+      currentUser.sessions_remaining = data.sessions_remaining;
+      renderUserMenu();
+    }
+    return true;
+  } catch (e) {
+    console.error('セッション開始エラー:', e);
+    return false;
+  }
+}
+
+// ============================================================
+// 30分タイマー（Free ユーザーのみ）
+// ============================================================
+function startFreeSessionTimer() {
+  if (currentUser?.plan === 'paid') return; // 有料ユーザーはスキップ
+  sessionStartTime = Date.now();
+  sessionTimerInterval = setInterval(() => {
+    const elapsed = (Date.now() - sessionStartTime) / 1000;
+    if (elapsed >= FREE_LIMIT_SEC) {
+      clearInterval(sessionTimerInterval);
+      sessionTimerInterval = null;
+      stopRecording();
+      showUpgradeModal('time');
+    }
+  }, 1000);
+}
+
+function stopFreeSessionTimer() {
+  if (sessionTimerInterval) {
+    clearInterval(sessionTimerInterval);
+    sessionTimerInterval = null;
+  }
+}
+
+// ============================================================
+// アップグレードモーダル
+// ============================================================
+function showUpgradeModal(reason) {
+  const modal = document.getElementById('upgrade-modal');
+  const icon  = document.getElementById('modal-icon');
+  const title = document.getElementById('modal-title');
+  const body  = document.getElementById('modal-body');
+
+  if (reason === 'sessions') {
+    icon.textContent  = '🎯';
+    title.textContent = `${FREE_SESSION_LIMIT}回の無料セッションを使い切りました`;
+    body.innerHTML    = '¥1,000/月 の有料プランで<strong>録音回数・時間が無制限</strong>になります。<br>いつでも解約できます。';
+  } else {
+    icon.textContent  = '⏱';
+    title.textContent = '30分のセッション上限に達しました';
+    body.innerHTML    = '有料プランなら<strong>時間制限なし</strong>で録音を続けられます。<br>¥1,000/月・いつでも解約可能。';
+  }
+  modal.style.display = 'flex';
+}
+
+function closeUpgradeModal() {
+  document.getElementById('upgrade-modal').style.display = 'none';
+}
+
+async function goToStripe() {
+  try {
+    const res = await fetch('/stripe/checkout', { method: 'POST' });
+    if (!res.ok) {
+      if (res.status === 401) { location.href = '/login'; return; }
+      throw new Error('Checkout 作成失敗');
+    }
+    const { url } = await res.json();
+    location.href = url;
+  } catch (e) {
+    alert('決済ページへの遷移に失敗しました。もう一度お試しください。');
+  }
+}
+
+// アップグレード成功バナー表示
+function checkUpgradedParam() {
+  if (!location.search.includes('upgraded=1')) return;
+  const banner = document.createElement('div');
+  banner.className   = 'upgrade-banner';
+  banner.textContent = '✓ 有料プランへのアップグレードが完了しました！';
+  document.body.appendChild(banner);
+  setTimeout(() => banner.remove(), 5000);
+  // URL からパラメーターを除去
+  history.replaceState({}, '', '/app');
+}
+
+// ============================================================
+// 起動
+// ============================================================
+initAuth();

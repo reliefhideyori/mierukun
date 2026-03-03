@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="ja" class="scroll-smooth">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Zonist｜議論を構造化するAIホワイトボード</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;800&family=Noto+Sans+JP:wght@400;700;900&display=swap');
+        :root {
+            --brand-primary: #0057FF;
+            --brand-dark: #0A0F1A;
+            --brand-light: #F8FAFC;
+        }
+        body {
+            font-family: 'Plus Jakarta Sans', 'Noto Sans JP', sans-serif;
+            background-color: var(--brand-light);
+            color: var(--brand-dark);
+        }
+        .glass-card {
+            background: rgba(255, 255, 255, 0.7);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.4);
+            box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.04);
+        }
+        .bg-mesh {
+            background-color: #f8fafc;
+            background-image:
+                radial-gradient(at 0% 0%, rgba(0, 87, 255, 0.07) 0px, transparent 50%),
+                radial-gradient(at 100% 0%, rgba(138, 43, 226, 0.05) 0px, transparent 50%);
+        }
+        .fade-in {
+            opacity: 0;
+            transform: translateY(20px);
+            transition: all 0.7s cubic-bezier(0.22, 1, 0.36, 1);
+        }
+        .fade-in.visible {
+            opacity: 1;
+            transform: translateY(0);
+        }
+        .node-line {
+            stroke-dasharray: 1000;
+            stroke-dashoffset: 1000;
+            animation: draw 2s ease-out forwards;
+        }
+        @keyframes draw {
+            to { stroke-dashoffset: 0; }
+        }
+        .floating {
+            animation: floating 3s ease-in-out infinite;
+        }
+        @keyframes floating {
+            0% { transform: translateY(0px); }
+            50% { transform: translateY(-10px); }
+            100% { transform: translateY(0px); }
+        }
+        /* ボタンをリンクとして使う共通スタイル */
+        a.btn-primary {
+            display: inline-flex; align-items: center; justify-content: center;
+            text-decoration: none;
+        }
+        a.btn-secondary {
+            display: inline-flex; align-items: center; justify-content: center;
+            text-decoration: none;
+        }
+    </style>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#0057FF',
+                        accent: '#8A2BE2',
+                        zinc: { 950: '#0A0F1A' }
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="bg-mesh antialiased">
+
+    <!-- Navigation -->
+    <nav class="fixed w-full top-0 z-50 bg-white/50 backdrop-blur-md border-b border-gray-200/50">
+        <div class="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
+            <div class="flex items-center gap-2">
+                <div class="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
+                    <i data-lucide="scan-search" class="text-white w-5 h-5"></i>
+                </div>
+                <span class="text-xl font-extrabold tracking-tight text-zinc-950">Zonist</span>
+            </div>
+            <div class="hidden md:flex gap-8 text-sm font-semibold text-zinc-600">
+                <a href="#features" class="hover:text-primary transition-colors">機能</a>
+                <a href="#comparison" class="hover:text-primary transition-colors">選ばれる理由</a>
+                <a href="#pricing" class="hover:text-primary transition-colors">料金</a>
+            </div>
+            <div class="flex items-center gap-4">
+                <a href="#" class="text-sm font-bold text-zinc-950 px-4 py-2 hover:bg-gray-100 rounded-lg transition-colors">ログイン</a>
+                <a href="/app" class="bg-primary text-white text-sm font-bold px-5 py-2.5 rounded-full hover:shadow-lg hover:shadow-primary/30 transition-all">無料で試す</a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <section class="relative pt-32 pb-20 lg:pt-48 lg:pb-40">
+        <div class="max-w-7xl mx-auto px-6 grid lg:grid-cols-2 gap-16 items-center">
+            <div class="fade-in">
+                <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 text-primary text-xs font-bold mb-6">
+                    <i data-lucide="sparkles" class="w-3 h-3"></i>
+                    議論が加速する、リアルタイムAIホワイトボード
+                </div>
+                <h1 class="text-5xl lg:text-7xl font-extrabold text-zinc-950 leading-[1.1] mb-8">
+                    ひらめきを、<br><span class="text-primary italic">逃さない。</span>
+                </h1>
+                <p class="text-xl text-zinc-600 leading-relaxed mb-10 max-w-lg">
+                    Zonistは、会議の音声をもとに<span class="text-zinc-950 font-bold border-b-2 border-primary/30">論点・アイデア・関係性</span>をリアルタイムに整理するAIホワイトボードです。
+                </p>
+                <div class="flex flex-col sm:flex-row gap-4">
+                    <a href="/app" class="btn-primary bg-primary text-white px-8 py-4 rounded-full font-bold text-lg shadow-xl shadow-primary/25 hover:scale-105 transition-transform">無料で試してみる</a>
+                    <a href="#features" class="btn-secondary bg-white border border-gray-200 px-8 py-4 rounded-full font-bold text-lg hover:bg-gray-50 transition-colors">機能をみる</a>
+                </div>
+                <p class="mt-6 text-sm text-zinc-400">カード登録不要 ・ 14日間すべての機能が使えます</p>
+            </div>
+            <!-- UI Mockup -->
+            <div class="relative fade-in" style="transition-delay:.2s">
+                <div class="glass-card rounded-3xl p-4 border border-white relative overflow-hidden aspect-square lg:aspect-video flex items-center justify-center">
+                    <svg viewBox="0 0 400 300" class="w-full h-full max-w-md opacity-80">
+                        <circle cx="200" cy="150" r="40" fill="none" stroke="#0057FF" stroke-width="2" />
+                        <text x="200" y="155" text-anchor="middle" font-size="12" font-weight="bold" fill="#0057FF">アジェンダ</text>
+                        <path class="node-line" d="M 240 150 L 320 100" stroke="#CBD5E1" stroke-width="1.5" />
+                        <rect x="300" y="80" width="80" height="30" rx="4" fill="white" stroke="#E2E8F0" />
+                        <text x="340" y="100" text-anchor="middle" font-size="10" fill="#64748B">課題 A</text>
+                        <path class="node-line" d="M 240 150 L 320 200" stroke="#CBD5E1" stroke-width="1.5" />
+                        <rect x="300" y="190" width="80" height="30" rx="4" fill="white" stroke="#E2E8F0" />
+                        <text x="340" y="210" text-anchor="middle" font-size="10" fill="#64748B">課題 B</text>
+                        <path class="node-line" d="M 160 150 L 80 150" stroke="#0057FF" stroke-width="2" stroke-dasharray="4 2" />
+                        <rect x="20" y="135" width="100" height="30" rx="4" fill="#0057FF" />
+                        <text x="70" y="155" text-anchor="middle" font-size="10" fill="white" font-weight="bold">AI整理中...</text>
+                    </svg>
+                    <div class="absolute bottom-8 right-8 glass-card p-3 rounded-2xl border-l-4 border-primary floating shadow-lg max-w-[200px]">
+                        <p class="text-[10px] text-zinc-400 mb-1">多治見さんの発言</p>
+                        <p class="text-xs font-bold leading-tight">「このプロジェクトの最優先事項はUXの改善です」</p>
+                    </div>
+                </div>
+                <div class="absolute -z-10 top-10 left-10 w-full h-full bg-primary/5 rounded-3xl blur-3xl"></div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Features Section -->
+    <section id="features" class="py-24 bg-white border-y border-gray-100">
+        <div class="max-w-7xl mx-auto px-6">
+            <div class="grid lg:grid-cols-3 gap-12 items-center">
+                <div class="lg:col-span-1 fade-in">
+                    <h2 class="text-3xl font-black text-zinc-950 mb-6">こんな会議、<br>増えていませんか？</h2>
+                    <p class="text-zinc-600 mb-8">議事録は効率化できても、最重要な「会議そのもの」はアナログなままです。</p>
+                    <div class="space-y-4">
+                        <div class="flex items-center gap-3 text-zinc-500">
+                            <i data-lucide="alert-circle" class="w-5 h-5 text-red-400"></i>
+                            <span>話して終わる（進展が見えない）</span>
+                        </div>
+                        <div class="flex items-center gap-3 text-zinc-500">
+                            <i data-lucide="alert-circle" class="w-5 h-5 text-red-400"></i>
+                            <span>誰かがメモ係になり、思考が止まる</span>
+                        </div>
+                        <div class="flex items-center gap-3 text-zinc-500">
+                            <i data-lucide="alert-circle" class="w-5 h-5 text-red-400"></i>
+                            <span>良いアイデアの整理が追いつかない</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="lg:col-span-2 grid md:grid-cols-2 gap-6">
+                    <div class="glass-card p-8 rounded-3xl border-gray-100 fade-in" style="transition-delay:.1s">
+                        <div class="w-12 h-12 bg-primary/10 rounded-xl flex items-center justify-center mb-6">
+                            <i data-lucide="waves" class="text-primary w-6 h-6"></i>
+                        </div>
+                        <h3 class="text-xl font-bold mb-4">ライブ整理</h3>
+                        <p class="text-zinc-500 text-sm leading-relaxed">音声をもとに、発言内容をリアルタイムで整理。メモ係がいなくても、全員が議論に集中できます。</p>
+                    </div>
+                    <div class="glass-card p-8 rounded-3xl border-gray-100 fade-in" style="transition-delay:.2s">
+                        <div class="w-12 h-12 bg-accent/10 rounded-xl flex items-center justify-center mb-6">
+                            <i data-lucide="map" class="text-accent w-6 h-6"></i>
+                        </div>
+                        <h3 class="text-xl font-bold mb-4">論点マップ</h3>
+                        <p class="text-zinc-500 text-sm leading-relaxed">テーマごとの論点や関係性を自動で可視化。話題の迷子を防ぎ、合意形成を加速させます。</p>
+                    </div>
+                    <div class="glass-card p-8 rounded-3xl border-gray-100 fade-in" style="transition-delay:.3s">
+                        <div class="w-12 h-12 bg-green-500/10 rounded-xl flex items-center justify-center mb-6">
+                            <i data-lucide="lightbulb" class="text-green-600 w-6 h-6"></i>
+                        </div>
+                        <h3 class="text-xl font-bold mb-4">アイデア展開</h3>
+                        <p class="text-zinc-500 text-sm leading-relaxed">出た発想をその場で広げて整理。ブレインストーミングの熱量を落とさず、実行可能な形へ。</p>
+                    </div>
+                    <div class="glass-card p-8 rounded-3xl border-gray-100 fade-in" style="transition-delay:.4s">
+                        <div class="w-12 h-12 bg-zinc-950/10 rounded-xl flex items-center justify-center mb-6">
+                            <i data-lucide="clipboard-check" class="text-zinc-950 w-6 h-6"></i>
+                        </div>
+                        <h3 class="text-xl font-bold mb-4">決定事項トラック</h3>
+                        <p class="text-zinc-500 text-sm leading-relaxed">「結局、何が決まったのか」をAIが抽出。TODOもセットで整理されるため、即座に次のアクションへ。</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Comparison Section -->
+    <section id="comparison" class="py-24 overflow-hidden">
+        <div class="max-w-7xl mx-auto px-6">
+            <div class="text-center mb-16 fade-in">
+                <h2 class="text-4xl font-black text-zinc-950 mb-4">議事録ツールではなく、<br>進展を生むための「会議ツール」</h2>
+                <p class="text-zinc-500">Zonistは記録の先の「意思決定」を支援します</p>
+            </div>
+            <div class="grid md:grid-cols-2 gap-px bg-gray-200 rounded-3xl overflow-hidden border border-gray-200 fade-in" style="transition-delay:.2s">
+                <div class="bg-white p-10 lg:p-16">
+                    <span class="text-zinc-400 font-bold text-xs uppercase tracking-widest block mb-4">従来ツール</span>
+                    <h3 class="text-2xl font-bold mb-8">会議後に読む「記録」</h3>
+                    <ul class="space-y-6">
+                        <li class="flex gap-4 items-start">
+                            <div class="w-5 h-5 rounded-full bg-red-100 flex items-center justify-center shrink-0 mt-1">
+                                <i data-lucide="x" class="text-red-500 w-3 h-3"></i>
+                            </div>
+                            <span class="text-zinc-600">テキストの羅列で、読み返さない</span>
+                        </li>
+                        <li class="flex gap-4 items-start">
+                            <div class="w-5 h-5 rounded-full bg-red-100 flex items-center justify-center shrink-0 mt-1">
+                                <i data-lucide="x" class="text-red-500 w-3 h-3"></i>
+                            </div>
+                            <span class="text-zinc-600">会議中の迷走は防げない</span>
+                        </li>
+                    </ul>
+                </div>
+                <div class="bg-zinc-950 p-10 lg:p-16 relative">
+                    <div class="absolute top-0 right-0 p-8 opacity-10">
+                        <i data-lucide="scan-search" class="w-32 h-32 text-white"></i>
+                    </div>
+                    <span class="text-primary font-bold text-xs uppercase tracking-widest block mb-4">Zonist</span>
+                    <h3 class="text-2xl font-bold text-white mb-8">会議中に使う「思考ツール」</h3>
+                    <ul class="space-y-6">
+                        <li class="flex gap-4 items-start">
+                            <div class="w-5 h-5 rounded-full bg-primary flex items-center justify-center shrink-0 mt-1">
+                                <i data-lucide="check" class="text-white w-3 h-3"></i>
+                            </div>
+                            <span class="text-zinc-300">図解されるので、瞬時に理解できる</span>
+                        </li>
+                        <li class="flex gap-4 items-start">
+                            <div class="w-5 h-5 rounded-full bg-primary flex items-center justify-center shrink-0 mt-1">
+                                <i data-lucide="check" class="text-white w-3 h-3"></i>
+                            </div>
+                            <span class="text-zinc-300">論点のズレをその場で修正できる</span>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Pricing Section -->
+    <section id="pricing" class="py-24 bg-zinc-950 text-white">
+        <div class="max-w-4xl mx-auto px-6 text-center">
+            <h2 class="text-3xl lg:text-5xl font-black mb-8 fade-in">創造性を、手の届く価格で。</h2>
+            <div class="inline-block p-1 bg-white/10 rounded-full mb-12 fade-in" style="transition-delay:.1s">
+                <div class="flex items-center">
+                    <span class="px-6 py-2 bg-primary rounded-full text-sm font-bold">月払い</span>
+                    <span class="px-6 py-2 text-sm font-bold opacity-50">年払い (20% OFF)</span>
+                </div>
+            </div>
+            <div class="glass-card border-white/10 p-12 rounded-[40px] fade-in" style="transition-delay:.2s">
+                <div class="flex flex-col items-center">
+                    <p class="text-primary font-bold text-sm tracking-widest uppercase mb-4">Standard Plan</p>
+                    <div class="flex items-baseline gap-2 mb-4">
+                        <span class="text-5xl lg:text-7xl font-black tracking-tight">¥1,000</span>
+                        <span class="text-zinc-400 font-bold">/ 月 / 1人</span>
+                    </div>
+                    <p class="text-zinc-400 mb-10 max-w-sm">
+                        小さく始めて、チームに広げられる価格設計。日常の会議から導入できます。
+                    </p>
+                    <a href="/app" class="btn-primary w-full bg-white text-zinc-950 py-4 rounded-full font-bold text-lg hover:bg-primary hover:text-white transition-all">今すぐ無料で試す</a>
+                    <p class="mt-4 text-xs text-zinc-500">初期費用 ¥0 / 最低利用期間なし</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Final CTA -->
+    <section class="py-32 bg-white relative overflow-hidden">
+        <div class="max-w-5xl mx-auto px-6 text-center relative z-10 fade-in">
+            <h2 class="text-4xl lg:text-7xl font-extrabold text-zinc-950 mb-12 leading-[1.1]">
+                次の会議から、<br>ひらめきを逃さない。
+            </h2>
+            <div class="flex flex-col sm:flex-row justify-center gap-6">
+                <a href="/app" class="btn-primary bg-primary text-white px-10 py-5 rounded-full font-extrabold text-xl shadow-2xl shadow-primary/40 hover:scale-105 transition-all">無料で試してみる</a>
+                <a href="#" class="btn-secondary bg-zinc-950 text-white px-10 py-5 rounded-full font-extrabold text-xl hover:bg-zinc-800 transition-all">導入相談をする</a>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="py-12 border-t border-gray-100 bg-white">
+        <div class="max-w-7xl mx-auto px-6 flex flex-col md:flex-row justify-between items-center gap-8">
+            <div class="flex items-center gap-2">
+                <div class="w-6 h-6 bg-zinc-950 rounded flex items-center justify-content: center">
+                    <i data-lucide="scan-search" class="text-white w-3 h-3 m-auto"></i>
+                </div>
+                <span class="font-bold tracking-tight text-zinc-950">Zonist</span>
+            </div>
+            <div class="flex gap-8 text-sm font-bold text-zinc-400">
+                <a href="#" class="hover:text-zinc-950 transition-colors">利用規約</a>
+                <a href="#" class="hover:text-zinc-950 transition-colors">プライバシーポリシー</a>
+                <a href="#" class="hover:text-zinc-950 transition-colors">運営会社</a>
+            </div>
+            <p class="text-sm text-zinc-400">&copy; 2026 Zonist Inc.</p>
+        </div>
+    </footer>
+
+    <script>
+        lucide.createIcons();
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) entry.target.classList.add('visible');
+            });
+        }, { threshold: 0.1 });
+        document.querySelectorAll('.fade-in').forEach(el => observer.observe(el));
+    </script>
+</body>
+</html>

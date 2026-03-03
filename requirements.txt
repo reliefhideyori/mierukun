@@ -3,3 +3,14 @@ uvicorn[standard]>=0.24.0
 python-dotenv>=1.0.0
 google-genai>=1.0.0
 python-multipart>=0.0.9
+
+# ── 認証 / DB ──────────────────────────────────────────
+sqlalchemy>=2.0
+authlib             # Google OAuth 2.0
+httpx               # authlib が内部で使用
+python-jose[cryptography]  # JWT 生成・検証
+passlib[bcrypt]     # パスワードハッシュ（将来拡張用）
+itsdangerous        # Starlette SessionMiddleware 用
+
+# ── Stripe 課金 ───────────────────────────────────────
+stripe
