@@ -68,6 +68,16 @@ async def app_page():
     return FileResponse("static/index.html")
 
 
+@app.get("/privacy")
+async def privacy_page():
+    return FileResponse("static/privacy.html")
+
+
+@app.get("/terms")
+async def terms_page():
+    return FileResponse("static/terms.html")
+
+
 # ===================== セッション管理 =====================
 FREE_SESSION_LIMIT = 3
 
