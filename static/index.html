@@ -29,13 +29,13 @@
       display: flex;
       flex-direction: column;
       align-items: center;
-      padding-bottom: 56px;
+      padding: 0 clamp(16px, 2.5vw, 40px) 56px;
     }
 
     /* ── ヘッダー ── */
     header {
-      width: 100%; max-width: 1040px;
-      padding: 28px 28px 0;
+      width: 100%;
+      padding: 28px 0 0;
       display: flex; align-items: center; justify-content: space-between; gap: 16px;
     }
     h1 {
@@ -61,8 +61,8 @@
 
     /* ── メインホワイトボードカード ── */
     .mindmap-main-card {
-      width: 100%; max-width: 1040px;
-      margin: 22px 28px 0;
+      width: 100%;
+      margin: 22px 0 0;
       background: rgba(255,255,255,.025);
       border: 1px solid var(--border);
       border-radius: 22px;
@@ -192,6 +192,25 @@
       font-size: .62rem; font-weight: 800;
       text-transform: uppercase; letter-spacing: .09em;
     }
+    .wb-group-label {
+      cursor: text;
+      border-radius: 3px;
+      padding: 1px 3px;
+      transition: background .12s;
+    }
+    .wb-group-label:hover { background: rgba(255,255,255,.1); }
+    /* グループ名インライン入力 */
+    .wb-group-name-input {
+      background: transparent;
+      border: none;
+      border-bottom: 1.5px solid currentColor;
+      color: inherit;
+      font: inherit;
+      outline: none;
+      width: 110px;
+      max-width: 160px;
+      padding: 0 2px 1px;
+    }
     .wb-group-ungroup {
       font-size: .6rem; color: rgba(255,255,255,.45);
       background: rgba(255,255,255,.1); border: none; border-radius: 4px;
@@ -260,7 +279,7 @@
     }
 
     /* ── コンテンツ / ログ ── */
-    .content-area { width: 100%; max-width: 1040px; margin: 16px 28px 0; }
+    .content-area { width: 100%; margin: 16px 0 0; }
     .main-panel {
       background: rgba(255,255,255,.025);
       border: 1px solid var(--border);
@@ -341,6 +360,6 @@
   </div>
 </div>
 
-<script src="/static/app.js?v=3"></script>
+<script src="/static/app.js?v=4"></script>
 </body>
 </html>

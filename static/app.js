@@ -26,6 +26,7 @@ let processingJobs = 0;
 let allIdeas       = [];
 let allTranscripts = '';
 let draggedIdx     = null;
+let groupNames     = {};   // groupId → カスタム名
 
 // ============================================================
 // DOM
@@ -56,7 +57,10 @@ function cleanupSingletonGroups() {
   const counts = {};
   allIdeas.forEach(i => { if (i.groupId) counts[i.groupId] = (counts[i.groupId] || 0) + 1; });
   Object.entries(counts).forEach(([gid, n]) => {
-    if (n <= 1) allIdeas.forEach(i => { if (i.groupId === gid) delete i.groupId; });
+    if (n <= 1) {
+      allIdeas.forEach(i => { if (i.groupId === gid) delete i.groupId; });
+      delete groupNames[gid];
+    }
   });
 }
 
@@ -80,6 +84,7 @@ elMainInner.addEventListener('click', e => {
   if (ungroupBtn) {
     const gid = ungroupBtn.dataset.gid;
     allIdeas.forEach(i => { if (i.groupId === gid) delete i.groupId; });
+    delete groupNames[gid];
     renderWhiteboard();
   }
 });
@@ -88,6 +93,30 @@ elMainInner.addEventListener('click', e => {
 // ホワイトボード: ダブルクリック → インライン編集
 // ============================================================
 elMainInner.addEventListener('dblclick', e => {
+  // ── グループ名インライン編集 ──
+  const groupLabel = e.target.closest('.wb-group-label');
+  if (groupLabel) {
+    const gid = groupLabel.dataset.gid;
+    if (!gid) return;
+    const currentName = groupNames[gid] || '';
+    groupLabel.innerHTML =
+      `<input class="wb-group-name-input" value="${escAttr(currentName)}" placeholder="グループ名" maxlength="20" />`;
+    const inp = groupLabel.querySelector('input');
+    inp.focus(); inp.select();
+    function saveGroupName() {
+      const v = inp.value.trim();
+      if (v) groupNames[gid] = v; else delete groupNames[gid];
+      renderWhiteboard();
+    }
+    inp.addEventListener('keydown', ev => {
+      if (ev.key === 'Enter')  { ev.preventDefault(); saveGroupName(); }
+      if (ev.key === 'Escape') renderWhiteboard();
+    });
+    inp.addEventListener('blur', () => setTimeout(saveGroupName, 100));
+    return;
+  }
+
+  // ── カードインライン編集 ──
   const card = e.target.closest('.wb-card');
   if (!card || e.target.closest('.wb-card-delete') || card.classList.contains('editing')) return;
 
@@ -461,7 +490,7 @@ function renderWhiteboard() {
       return `
         <div class="wb-group" style="border-color:${cat.color}50; background:${cat.color}08">
           <div class="wb-group-header" style="background:${cat.color}1a; border-bottom:1px solid ${cat.color}30">
-            <span class="wb-group-label" style="color:${cat.color}cc">グループ &nbsp;${item.cards.length}</span>
+            <span class="wb-group-label" data-gid="${escAttr(item.gid)}" title="ダブルクリックで名前を編集" style="color:${cat.color}cc">${escHtml(groupNames[item.gid] || 'グループ')} &nbsp;${item.cards.length}</span>
             <button class="wb-group-ungroup" data-gid="${escAttr(item.gid)}">解除</button>
           </div>
           <div class="wb-group-cards">${inner}</div>
