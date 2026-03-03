@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>音声文字起こし + アイデアマップ</title>
+  <title>ZONIST</title>
   <style>
     :root {
       --bg:       #0f1117;
@@ -38,9 +38,7 @@
     }
     h1 { font-size: 1.05rem; font-weight: 700; white-space: nowrap; }
     .header-right { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-    .badge {
-      font-size: .72rem; padding: 3px 10px; border-radius: 100px; font-weight: 600;
-    }
+    .badge { font-size: .72rem; padding: 3px 10px; border-radius: 100px; font-weight: 600; }
     .badge-gray   { background:#2d3458; color:#94a3b8; }
     .badge-green  { background:#14532d; color:#4ade80; }
     .badge-red    { background:#450a0a; color:#f87171; }
@@ -75,15 +73,10 @@
       font-size: .72rem; font-weight: 700; color: var(--muted);
       text-transform: uppercase; letter-spacing: .07em; white-space: nowrap;
     }
-    #status-text {
-      font-size: .75rem; color: var(--muted); text-align: right;
-    }
+    #status-text { font-size: .75rem; color: var(--muted); text-align: right; }
     #status-text.err { color: #f87171; }
 
-    #mindmap-main-inner {
-      padding: 10px 10px 68px;
-      min-height: 260px;
-    }
+    #mindmap-main-inner { padding: 10px 10px 68px; min-height: 260px; }
     #mindmap-main-inner .empty-hint { padding: 70px 0; text-align: center; }
 
     /* ── ホワイトボード（3カラム） ── */
@@ -97,10 +90,8 @@
       background: var(--surface2);
       border: 1px solid var(--border);
       border-radius: 8px;
-      display: flex;
-      flex-direction: column;
-      min-height: 100px;
-      overflow: hidden;
+      display: flex; flex-direction: column;
+      min-height: 100px; overflow: hidden;
     }
     .wb-section-header {
       padding: 7px 10px 6px;
@@ -118,63 +109,115 @@
       padding: 6px;
       display: flex; flex-direction: column; gap: 5px;
       flex: 1;
+      transition: background .15s;
     }
+    .wb-section-body.drag-over-section {
+      background: rgba(108,99,255,.08);
+      outline: 2px dashed rgba(108,99,255,.4);
+      outline-offset: -2px;
+      border-radius: 6px;
+    }
+
+    /* ── カード ── */
     .wb-card {
       background: var(--surface);
       border-radius: 5px;
       padding: 6px 8px;
       border-left: 3px solid;
       position: relative;
+      cursor: grab;
+      transition: box-shadow .15s;
+      user-select: none;
+    }
+    .wb-card:active { cursor: grabbing; }
+    .wb-card.editing { cursor: default; user-select: auto; }
+    .wb-card.dragging { opacity: 0.35; cursor: grabbing; }
+    .wb-card.drag-over {
+      outline: 2px dashed var(--accent);
+      background: rgba(108,99,255,.1);
     }
     .wb-card-title {
       font-size: .80rem; font-weight: 600; line-height: 1.3;
       margin-bottom: 2px;
-      padding-right: 20px; /* Xボタン分 */
+      padding-right: 20px;
     }
-    .wb-card-body {
-      font-size: .72rem; color: var(--muted); line-height: 1.4;
-    }
+    .wb-card-body { font-size: .72rem; color: var(--muted); line-height: 1.4; }
     .wb-card-delete {
-      position: absolute;
-      top: 5px; right: 5px;
-      width: 18px; height: 18px;
-      border-radius: 50%;
-      border: none;
-      background: rgba(255,255,255,.1);
-      color: var(--muted);
-      font-size: .65rem;
-      cursor: pointer;
-      opacity: 0;
+      position: absolute; top: 5px; right: 5px;
+      width: 18px; height: 18px; border-radius: 50%;
+      border: none; background: rgba(255,255,255,.1); color: var(--muted);
+      font-size: .65rem; cursor: pointer; opacity: 0;
       transition: opacity .15s, background .15s;
       display: flex; align-items: center; justify-content: center;
-      line-height: 1;
-      padding: 0;
+      line-height: 1; padding: 0;
     }
     .wb-card:hover .wb-card-delete { opacity: 1; }
     .wb-card-delete:hover { background: var(--red); color: #fff; }
-    .wb-empty {
-      font-size: .72rem; color: var(--muted);
-      padding: 6px 2px; text-align: center; opacity: .5;
+
+    /* ── グループ ── */
+    .wb-group {
+      border: 1px dashed rgba(255,255,255,.2);
+      border-radius: 8px;
+      padding: 5px 5px 4px;
+      display: flex; flex-direction: column; gap: 4px;
+      background: rgba(255,255,255,.03);
+      position: relative;
     }
+    .wb-group-ungroup {
+      position: absolute; top: 3px; right: 3px;
+      font-size: .6rem; color: var(--muted);
+      background: var(--surface2); border: none;
+      border-radius: 4px; padding: 1px 5px;
+      cursor: pointer; opacity: 0;
+      transition: opacity .15s, background .15s;
+    }
+    .wb-group:hover .wb-group-ungroup { opacity: 1; }
+    .wb-group-ungroup:hover { background: var(--border); color: var(--text); }
+    /* グループ内カードは削除ボタンを右上少しずらす */
+    .wb-group .wb-card { border-radius: 4px; }
+
+    /* ── インライン編集 ── */
+    .wb-edit-title {
+      display: block; width: 100%;
+      background: var(--surface2);
+      border: 1.5px solid var(--accent);
+      border-radius: 4px; color: var(--text);
+      font-size: .80rem; font-weight: 600;
+      padding: 3px 6px; outline: none;
+      margin-bottom: 4px;
+      font-family: inherit;
+    }
+    .wb-edit-body {
+      display: block; width: 100%;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 4px; color: var(--muted);
+      font-size: .72rem; padding: 3px 6px;
+      resize: vertical; outline: none;
+      font-family: inherit; min-height: 36px;
+    }
+    .wb-edit-body:focus { border-color: var(--border); }
+    .wb-edit-hint {
+      font-size: .62rem; color: var(--muted); opacity: .55;
+      margin-top: 3px; text-align: right;
+    }
+
+    .wb-empty { font-size: .72rem; color: var(--muted); padding: 6px 2px; text-align: center; opacity: .5; }
+
     @media (max-width: 640px) {
       .whiteboard { grid-template-columns: 1fr; }
     }
 
     /* ── 録音ミニオーバーレイ（右下） ── */
     .rec-mini-overlay {
-      position: absolute;
-      bottom: 14px; right: 14px;
+      position: absolute; bottom: 14px; right: 14px;
       display: flex; align-items: center; gap: 8px;
-      background: rgba(15, 17, 23, 0.92);
-      border: 1px solid var(--border);
-      border-radius: 50px;
-      padding: 5px 14px 5px 10px;
-      backdrop-filter: blur(10px);
-      z-index: 10;
+      background: rgba(15,17,23,0.92);
+      border: 1px solid var(--border); border-radius: 50px;
+      padding: 5px 14px 5px 10px; backdrop-filter: blur(10px); z-index: 10;
     }
     #timer {
-      font-size: 1rem; font-weight: 700;
-      font-variant-numeric: tabular-nums;
+      font-size: 1rem; font-weight: 700; font-variant-numeric: tabular-nums;
       color: var(--text); min-width: 44px; text-align: right;
     }
     #timer.rec { color: var(--red); }
@@ -199,13 +242,10 @@
 
     /* ── コンテンツエリア / ログパネル ── */
     .content-area { width:100%; max-width:960px; margin:16px 20px 0; }
-
     .main-panel {
-      background:var(--surface);
-      border: 1px solid var(--border);
+      background:var(--surface); border: 1px solid var(--border);
       border-radius: var(--radius);
     }
-
     .log-header {
       display:flex; align-items:center; justify-content:space-between;
       padding:11px 16px; border-bottom:1px solid var(--border);
@@ -225,7 +265,6 @@
     .log-txt  { font-size:.87rem; line-height:1.6; word-break:break-word; white-space:pre-wrap; }
     .log-txt.err { color:#f87171; }
     .log-placeholder { padding:32px 16px; text-align:center; color:var(--muted); font-size:.87rem; }
-
     .empty-hint { color:var(--muted); font-size:.87rem; text-align:center; padding:36px 0; }
 
     /* ── スクロールバー ── */
@@ -237,14 +276,14 @@
 <body>
 
 <header>
-  <h1>🎙 音声文字起こし + アイデアマップ</h1>
+  <h1>🎙 ZONIST</h1>
   <div class="header-right">
     <span id="proc-badge" class="proc-badge" style="display:none">⚙ 処理中 0件</span>
     <span id="api-status" class="badge badge-gray">待機中</span>
   </div>
 </header>
 
-<!-- メインホワイトボードカード（録音コントロール内包） -->
+<!-- ホワイトボードカード（録音コントロール内包） -->
 <div class="mindmap-main-card">
   <div class="mindmap-main-header">
     <span class="mindmap-main-label">📋 ホワイトボード</span>
@@ -256,9 +295,7 @@
   <!-- 録音ミニコントロール（右下オーバーレイ） -->
   <div class="rec-mini-overlay">
     <span id="timer">0:00</span>
-    <button id="rec-btn" title="録音開始">
-      <span id="btn-icon">🎤</span>
-    </button>
+    <button id="rec-btn" title="録音開始"><span id="btn-icon">🎤</span></button>
   </div>
 </div>
 
@@ -278,6 +315,6 @@
   </div>
 </div>
 
-<script src="/static/app.js"></script>
+<script src="/static/app.js?v=2"></script>
 </body>
 </html>

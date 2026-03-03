@@ -3,15 +3,11 @@
 // ============================================================
 // 定数
 // ============================================================
-
-// 会議で使う固定カテゴリ 3種（バックエンドのプロンプトと完全一致させること）
 const MEETING_CATS = [
   { key: 'アイデア', icon: '💡', color: '#4f7eff', light: 'rgba(79,126,255,.13)' },
   { key: 'リスク',   icon: '⚠️', color: '#ff6b6b', light: 'rgba(255,107,107,.13)' },
   { key: '意見',     icon: '💬', color: '#ff9a3c', light: 'rgba(255,154,60,.13)'  },
 ];
-
-// ローリング録音: 1分ごとに音声チャンクをGeminiへ送信（録音は継続）
 const CHUNK_INTERVAL_MS = 60_000;
 
 // ============================================================
@@ -26,11 +22,10 @@ let chunkCount     = 0;
 let startTime      = null;
 let isRecording    = false;
 let logCount       = 0;
-
 let processingJobs = 0;
-
 let allIdeas       = [];
 let allTranscripts = '';
+let draggedIdx     = null;
 
 // ============================================================
 // DOM
@@ -44,18 +39,184 @@ const elProcBadge = document.getElementById('proc-badge');
 const elLogBody   = document.getElementById('log-body');
 const elLogCount  = document.getElementById('log-count');
 const elBtnClear  = document.getElementById('btn-clear');
+const elMainInner = document.getElementById('mindmap-main-inner');
 
 // ============================================================
-// ホワイトボードカード削除（イベント委譲）
+// ユーティリティ
 // ============================================================
-document.getElementById('mindmap-main-inner').addEventListener('click', e => {
-  const btn = e.target.closest('.wb-card-delete');
-  if (!btn) return;
-  const idx = parseInt(btn.dataset.idx, 10);
-  if (!isNaN(idx)) {
-    allIdeas.splice(idx, 1);
+function escHtml(s) {
+  return (s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');
+}
+function escAttr(s) {
+  return (s || '').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// グループが1枚になったら自動解除
+function cleanupSingletonGroups() {
+  const counts = {};
+  allIdeas.forEach(i => { if (i.groupId) counts[i.groupId] = (counts[i.groupId] || 0) + 1; });
+  Object.entries(counts).forEach(([gid, n]) => {
+    if (n <= 1) allIdeas.forEach(i => { if (i.groupId === gid) delete i.groupId; });
+  });
+}
+
+// ============================================================
+// ホワイトボード: クリック委譲（削除 / グループ解除）
+// ============================================================
+elMainInner.addEventListener('click', e => {
+  // カード削除
+  const deleteBtn = e.target.closest('.wb-card-delete');
+  if (deleteBtn) {
+    const idx = parseInt(deleteBtn.dataset.idx, 10);
+    if (!isNaN(idx)) {
+      allIdeas.splice(idx, 1);
+      cleanupSingletonGroups();
+      renderWhiteboard();
+    }
+    return;
+  }
+  // グループ解除
+  const ungroupBtn = e.target.closest('.wb-group-ungroup');
+  if (ungroupBtn) {
+    const gid = ungroupBtn.dataset.gid;
+    allIdeas.forEach(i => { if (i.groupId === gid) delete i.groupId; });
     renderWhiteboard();
   }
+});
+
+// ============================================================
+// ホワイトボード: ダブルクリック → インライン編集
+// ============================================================
+elMainInner.addEventListener('dblclick', e => {
+  const card = e.target.closest('.wb-card');
+  if (!card || e.target.closest('.wb-card-delete') || card.classList.contains('editing')) return;
+
+  const idx = parseInt(card.dataset.idx, 10);
+  if (isNaN(idx)) return;
+  const idea = allIdeas[idx];
+  if (!idea) return;
+
+  const catMeta = MEETING_CATS.find(c => c.key === idea.category) || MEETING_CATS[0];
+
+  card.classList.add('editing');
+  card.setAttribute('draggable', 'false');
+  card.innerHTML = `
+    <input  class="wb-edit-title" value="${escAttr(idea.title)}" maxlength="30"
+            style="border-color:${catMeta.color}" />
+    <textarea class="wb-edit-body" rows="2" maxlength="100">${escHtml(idea.body || '')}</textarea>
+    <div class="wb-edit-hint">Enter: 確定 &nbsp;|&nbsp; Esc: キャンセル</div>`;
+
+  const titleInput = card.querySelector('.wb-edit-title');
+  const bodyInput  = card.querySelector('.wb-edit-body');
+  titleInput.focus();
+  titleInput.select();
+
+  function save() {
+    const newTitle = titleInput.value.trim();
+    const newBody  = bodyInput.value.trim();
+    if (newTitle) {
+      allIdeas[idx].title = newTitle;
+      allIdeas[idx].body  = newBody;
+    }
+    renderWhiteboard();
+  }
+
+  titleInput.addEventListener('keydown', ev => {
+    if (ev.key === 'Enter')  { ev.preventDefault(); bodyInput.focus(); }
+    if (ev.key === 'Escape') renderWhiteboard();
+  });
+  bodyInput.addEventListener('keydown', ev => {
+    if (ev.key === 'Enter' && !ev.shiftKey) { ev.preventDefault(); save(); }
+    if (ev.key === 'Escape') renderWhiteboard();
+  });
+
+  let blurTimer = null;
+  [titleInput, bodyInput].forEach(el => {
+    el.addEventListener('blur',  () => { blurTimer = setTimeout(save, 150); });
+    el.addEventListener('focus', () => { clearTimeout(blurTimer); blurTimer = null; });
+  });
+});
+
+// ============================================================
+// ホワイトボード: ドラッグ & ドロップ → グループ化 / カテゴリ移動
+// ============================================================
+elMainInner.addEventListener('dragstart', e => {
+  const card = e.target.closest('.wb-card');
+  if (!card || card.classList.contains('editing')) return;
+  draggedIdx = parseInt(card.dataset.idx, 10);
+  setTimeout(() => card.classList.add('dragging'), 0);
+  e.dataTransfer.effectAllowed = 'move';
+});
+
+elMainInner.addEventListener('dragend', () => {
+  draggedIdx = null;
+  elMainInner.querySelectorAll('.dragging, .drag-over, .drag-over-section')
+    .forEach(el => el.classList.remove('dragging', 'drag-over', 'drag-over-section'));
+});
+
+elMainInner.addEventListener('dragover', e => {
+  e.preventDefault();
+  elMainInner.querySelectorAll('.drag-over, .drag-over-section')
+    .forEach(el => el.classList.remove('drag-over', 'drag-over-section'));
+
+  const card = e.target.closest('.wb-card:not(.dragging)');
+  if (card && parseInt(card.dataset.idx, 10) !== draggedIdx) {
+    card.classList.add('drag-over');
+    e.dataTransfer.dropEffect = 'move';
+    return;
+  }
+  const sectionBody = e.target.closest('.wb-section-body');
+  if (sectionBody) {
+    sectionBody.classList.add('drag-over-section');
+    e.dataTransfer.dropEffect = 'move';
+  }
+});
+
+elMainInner.addEventListener('drop', e => {
+  e.preventDefault();
+  elMainInner.querySelectorAll('.drag-over, .drag-over-section')
+    .forEach(el => el.classList.remove('drag-over', 'drag-over-section'));
+
+  if (draggedIdx === null || isNaN(draggedIdx)) return;
+  const draggedIdea = allIdeas[draggedIdx];
+  if (!draggedIdea) return;
+
+  // ── カードにドロップ → グループ化 ──
+  const targetCard = e.target.closest('.wb-card:not(.dragging)');
+  if (targetCard) {
+    const targetIdx = parseInt(targetCard.dataset.idx, 10);
+    if (isNaN(targetIdx) || targetIdx === draggedIdx) return;
+    const targetIdea = allIdeas[targetIdx];
+
+    // ドラッグ元のカテゴリをターゲットに揃える
+    draggedIdea.category = targetIdea.category;
+
+    // グループID を統合
+    if (targetIdea.groupId) {
+      draggedIdea.groupId = targetIdea.groupId;
+    } else if (draggedIdea.groupId) {
+      targetIdea.groupId = draggedIdea.groupId;
+    } else {
+      const gid = 'g_' + Date.now();
+      draggedIdea.groupId = gid;
+      targetIdea.groupId  = gid;
+    }
+    renderWhiteboard();
+    return;
+  }
+
+  // ── セクション空白にドロップ → カテゴリ移動（グループ解除） ──
+  const sectionBody = e.target.closest('.wb-section-body');
+  if (sectionBody) {
+    const cat = sectionBody.dataset.cat;
+    if (cat) {
+      draggedIdea.category = cat;
+      delete draggedIdea.groupId;
+      cleanupSingletonGroups();
+      renderWhiteboard();
+    }
+  }
+  draggedIdx = null;
 });
 
 // ============================================================
@@ -79,7 +240,6 @@ function updateProcBadge() {
 // ============================================================
 async function startRecording() {
   if (isRecording) return;
-
   let stream;
   try {
     stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -88,57 +248,43 @@ async function startRecording() {
       ? 'マイクへのアクセスが拒否されました' : `マイクエラー: ${e.message}`, true);
     return;
   }
-
   activeStream = stream;
   startTime    = Date.now();
   isRecording  = true;
   chunkCount   = 0;
-
   setRecordingUI(true);
   startTimerUI();
   setStatus('🔴 録音中… 1分ごとに自動で文字起こしされます');
   setApiStatus('録音中', 'green');
-
   startChunk();
-
-  chunkTimer = setInterval(() => {
-    if (isRecording) rollChunk();
-  }, CHUNK_INTERVAL_MS);
+  chunkTimer = setInterval(() => { if (isRecording) rollChunk(); }, CHUNK_INTERVAL_MS);
 }
 
 // ============================================================
-// チャンク録音（ストリームを引き継いで新しい MediaRecorder を作成）
+// チャンク録音
 // ============================================================
 function startChunk() {
   audioChunks = [];
   const mimeType = ['audio/webm;codecs=opus','audio/webm','audio/ogg;codecs=opus','audio/mp4']
     .find(t => MediaRecorder.isTypeSupported(t)) ?? '';
   mediaRecorder = new MediaRecorder(activeStream, mimeType ? { mimeType } : {});
-
   mediaRecorder.ondataavailable = e => { if (e.data.size > 0) audioChunks.push(e.data); };
   mediaRecorder.onstop = () => {
     const blob = new Blob(audioChunks, { type: mediaRecorder.mimeType || 'audio/webm' });
     sendAudio(blob);
-
     if (isRecording) {
       startChunk();
     } else {
-      if (activeStream) {
-        activeStream.getTracks().forEach(t => t.stop());
-        activeStream = null;
-      }
+      if (activeStream) { activeStream.getTracks().forEach(t => t.stop()); activeStream = null; }
     }
   };
-
   mediaRecorder.start(1000);
 }
 
 function rollChunk() {
   chunkCount++;
   setStatus(`🔄 第${chunkCount}チャンクを文字起こし中… 録音は継続中`);
-  if (mediaRecorder && mediaRecorder.state !== 'inactive') {
-    mediaRecorder.stop();
-  }
+  if (mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop();
 }
 
 // ============================================================
@@ -147,33 +293,28 @@ function rollChunk() {
 function stopRecording() {
   if (!isRecording) return;
   isRecording = false;
-
   clearInterval(timerInterval);
   clearInterval(chunkTimer);
   timerInterval = null;
   chunkTimer    = null;
-
   if (mediaRecorder && mediaRecorder.state !== 'inactive') {
     mediaRecorder.stop();
   } else if (activeStream) {
     activeStream.getTracks().forEach(t => t.stop());
     activeStream = null;
   }
-
   setRecordingUI(false);
   setStatus('⏹ 録音停止 ✓ 最終チャンクを処理中…');
 }
 
 // ============================================================
-// 文字起こし送信（バックグラウンド・非ブロッキング）
+// 文字起こし送信
 // ============================================================
 async function sendAudio(blob) {
   if (blob.size < 1000) return;
-
   incProc();
   const formData = new FormData();
   formData.append('audio', blob, 'recording.webm');
-
   try {
     const res = await fetch('/transcribe', { method: 'POST', body: formData });
     if (!res.ok) {
@@ -182,12 +323,9 @@ async function sendAudio(blob) {
     }
     const data = await res.json();
     addLogEntry(data.text, data.size_bytes ?? blob.size);
-
     allTranscripts += (allTranscripts ? '\n\n' : '') + data.text;
     extractIdeas(data.text);
-
     if (isRecording) setStatus('🔴 録音中… 1分ごとに自動で文字起こしされます');
-
   } catch (e) {
     addLogEntry(`[エラー] ${e.message}`, blob.size, true);
     setApiStatus('エラー', 'red');
@@ -201,9 +339,7 @@ async function sendAudio(blob) {
 // ============================================================
 async function extractIdeas(text) {
   if (!text || !text.trim()) return;
-
   incProc();
-
   try {
     const res = await fetch('/extract-ideas', {
       method: 'POST',
@@ -216,7 +352,6 @@ async function extractIdeas(text) {
     }
     const data = await res.json();
     if (data.ideas && data.ideas.length > 0) {
-      // タイトルベースで重複排除
       const existingTitles = new Set(allIdeas.map(i => i.title.trim()));
       const newIdeas = data.ideas.filter(i => !existingTitles.has((i.title || '').trim()));
       allIdeas = [...allIdeas, ...newIdeas];
@@ -236,7 +371,7 @@ function startTimerUI() {
   timerInterval = setInterval(() => {
     const elapsed = Date.now() - startTime;
     const sec = Math.floor(elapsed / 1000);
-    const m   = Math.floor(sec / 60), s = sec % 60;
+    const m = Math.floor(sec / 60), s = sec % 60;
     elTimer.textContent = `${m}:${String(s).padStart(2,'0')}`;
   }, 200);
 }
@@ -283,48 +418,68 @@ function addLogEntry(text, size, isErr = false) {
   setTimeout(() => entry.classList.remove('hi'), 3000);
 }
 
-function escHtml(s) {
-  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');
-}
-
 // ============================================================
-// ホワイトボード（3固定カテゴリ × エリア表示）
+// ホワイトボード描画（グループ対応）
 // ============================================================
 function renderWhiteboard() {
-  const container = document.getElementById('mindmap-main-inner');
-
   if (allIdeas.length === 0) {
-    container.innerHTML = '<div class="empty-hint">録音・アイデア抽出後にホワイトボードが表示されます</div>';
+    elMainInner.innerHTML = '<div class="empty-hint">録音・アイデア抽出後にホワイトボードが表示されます</div>';
     return;
   }
+
+  // 1枚のカードを HTML 文字列に変換
+  const cardHtml = (idea, idx, color) => `
+    <div class="wb-card" draggable="true" data-idx="${idx}" style="border-left-color:${color}">
+      <div class="wb-card-title" style="color:${color}">${escHtml(idea.title)}</div>
+      ${idea.body ? `<div class="wb-card-body">${escHtml(idea.body)}</div>` : ''}
+      <button class="wb-card-delete" data-idx="${idx}" title="削除">✕</button>
+    </div>`;
 
   const sections = MEETING_CATS.map(cat => {
     const ideas = allIdeas.filter(i => i.category === cat.key);
 
-    const cards = ideas.map(idea => {
+    // ungrouped / grouped に整理
+    const groupsMap = {};
+    const items = [];
+    ideas.forEach(idea => {
       const idx = allIdeas.indexOf(idea);
+      if (!idea.groupId) {
+        items.push({ type: 'card', idea, idx });
+      } else {
+        if (!groupsMap[idea.groupId]) {
+          groupsMap[idea.groupId] = [];
+          items.push({ type: 'group', gid: idea.groupId, cards: groupsMap[idea.groupId] });
+        }
+        groupsMap[idea.groupId].push({ idea, idx });
+      }
+    });
+
+    const bodyContent = items.map(item => {
+      if (item.type === 'card') return cardHtml(item.idea, item.idx, cat.color);
+      // グループ
+      const inner = item.cards.map(c => cardHtml(c.idea, c.idx, cat.color)).join('');
       return `
-        <div class="wb-card" style="border-left-color:${cat.color}">
-          <div class="wb-card-title" style="color:${cat.color}">${escHtml(idea.title)}</div>
-          ${idea.body ? `<div class="wb-card-body">${escHtml(idea.body)}</div>` : ''}
-          <button class="wb-card-delete" data-idx="${idx}" title="削除">✕</button>
+        <div class="wb-group">
+          <button class="wb-group-ungroup" data-gid="${escAttr(item.gid)}" title="グループ解除">解除</button>
+          ${inner}
         </div>`;
     }).join('');
 
     return `
       <div class="wb-section">
-        <div class="wb-section-header" style="color:${cat.color}; border-bottom-color:${cat.color}; background:${cat.light}">
+        <div class="wb-section-header"
+             style="color:${cat.color}; border-bottom-color:${cat.color}; background:${cat.light}">
           <span>${cat.icon}</span>
           <span>${escHtml(cat.key)}</span>
           ${ideas.length > 0 ? `<span class="wb-count" style="background:${cat.color}30">${ideas.length}</span>` : ''}
         </div>
-        <div class="wb-section-body">
-          ${cards || '<div class="wb-empty">—</div>'}
+        <div class="wb-section-body" data-cat="${escAttr(cat.key)}">
+          ${bodyContent || '<div class="wb-empty">—</div>'}
         </div>
       </div>`;
   }).join('');
 
-  container.innerHTML = `<div class="whiteboard">${sections}</div>`;
+  elMainInner.innerHTML = `<div class="whiteboard">${sections}</div>`;
 }
 
 // ============================================================
