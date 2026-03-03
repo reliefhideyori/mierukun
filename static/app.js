@@ -644,6 +644,16 @@ function renderUserMenu() {
   const badge    = document.getElementById('session-badge');
   const btnUpgrade = document.getElementById('btn-upgrade-menu');
 
+  // ── ZONIST / ZONIST Pro タイトル切り替え ──
+  const h1 = document.querySelector('h1');
+  if (h1) {
+    if (currentUser.plan === 'paid') {
+      h1.innerHTML = 'ZONIST <span style="font-size:.6em;background:linear-gradient(135deg,#a78bfa,#818cf8);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;font-weight:900;">Pro</span>';
+    } else {
+      h1.textContent = 'ZONIST';
+    }
+  }
+
   dropdown.style.display = '';
   avatar.src = currentUser.avatar_url || '';
   avatar.alt = currentUser.name || currentUser.email;
@@ -777,15 +787,30 @@ async function goToStripe() {
 }
 
 // アップグレード成功バナー表示
-function checkUpgradedParam() {
+async function checkUpgradedParam() {
   if (!location.search.includes('upgraded=1')) return;
+  history.replaceState({}, '', '/app');
+
   const banner = document.createElement('div');
   banner.className   = 'upgrade-banner';
   banner.textContent = '✓ 有料プランへのアップグレードが完了しました！';
   document.body.appendChild(banner);
-  setTimeout(() => banner.remove(), 5000);
-  // URL からパラメーターを除去
-  history.replaceState({}, '', '/app');
+  setTimeout(() => banner.remove(), 6000);
+
+  // Webhook が DB を更新するまで最大10秒ポーリング
+  for (let i = 0; i < 5; i++) {
+    await new Promise(r => setTimeout(r, 2000));
+    try {
+      const res = await fetch('/auth/me');
+      if (!res.ok) break;
+      const data = await res.json();
+      if (data.plan === 'paid') {
+        currentUser = data;
+        renderUserMenu();
+        break;
+      }
+    } catch (_) { break; }
+  }
 }
 
 // ============================================================
