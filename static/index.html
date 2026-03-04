@@ -381,22 +381,69 @@
     }
     .wb-add-cancel:hover { background: rgba(255,255,255,.13); color: var(--text); }
 
-    /* ── アップグレードボタン（左下） ── */
+    /* ── アップグレードボタン（ヘッダー内） ── */
     #upgrade-quick-btn {
-      position: absolute; bottom: 16px; left: 16px;
-      display: flex; align-items: center; gap: 6px;
+      display: flex; align-items: center; gap: 5px;
       background: linear-gradient(135deg, rgba(108,95,255,.22), rgba(155,93,229,.22));
       border: 1px solid rgba(124,107,255,.4);
-      border-radius: 100px; padding: 7px 16px 7px 13px;
-      backdrop-filter: blur(20px); cursor: pointer;
-      color: #c4baff; font-size: .78rem; font-weight: 700;
-      transition: background .15s, transform .15s, box-shadow .15s;
-      box-shadow: 0 2px 12px rgba(108,95,255,.2);
+      border-radius: 100px; padding: 6px 14px 6px 11px;
+      cursor: pointer;
+      color: #c4baff; font-size: .75rem; font-weight: 700;
+      transition: background .15s, transform .15s;
+      white-space: nowrap; flex-shrink: 0;
     }
     #upgrade-quick-btn:hover {
       background: linear-gradient(135deg, rgba(108,95,255,.38), rgba(155,93,229,.38));
       transform: scale(1.04);
-      box-shadow: 0 4px 20px rgba(108,95,255,.35);
+    }
+
+    /* ── カード: 星マーク（強調） ── */
+    .wb-card-star {
+      position: absolute; top: 5px; left: 5px;
+      width: 16px; height: 16px; border-radius: 50%;
+      border: none; background: none; cursor: pointer;
+      font-size: .7rem; line-height: 1;
+      display: flex; align-items: center; justify-content: center;
+      opacity: 0; transition: opacity .15s;
+      padding: 0; color: rgba(255,200,50,.5);
+    }
+    .wb-card:hover .wb-card-star { opacity: 1; }
+    .wb-card.starred .wb-card-star { opacity: 1; color: #fbbf24; }
+    .wb-card.starred {
+      background: rgba(251,191,36,.07);
+      border-left-color: #fbbf24 !important;
+      box-shadow: 0 0 0 1px rgba(251,191,36,.2), 0 2px 12px rgba(251,191,36,.08);
+    }
+    .wb-card.starred .wb-card-title { color: #fde68a; }
+    /* 星があるのでタイトルのpadding-leftを少し広げる */
+    .wb-card-title { padding-right: 22px; padding-left: 18px; }
+
+    /* ── 選択モード（モバイル長押しグルーピング） ── */
+    .wb-card.selectable { cursor: pointer; }
+    .wb-card.selected {
+      outline: 2px solid var(--accent);
+      background: rgba(124,107,255,.12);
+      transform: none;
+    }
+    .wb-card.selected .wb-card-star { opacity: 0 !important; }
+    #select-group-bar {
+      position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%);
+      display: none; align-items: center; gap: 10px;
+      background: #0e1525; border: 1px solid rgba(124,107,255,.5);
+      border-radius: 100px; padding: 8px 20px 8px 16px;
+      box-shadow: 0 8px 32px rgba(0,0,0,.5); z-index: 50;
+      animation: slideUp .25s ease-out;
+    }
+    #select-group-bar.show { display: flex; }
+    @keyframes slideUp { from { opacity:0; transform: translateX(-50%) translateY(12px); } to { opacity:1; transform: translateX(-50%) translateY(0); } }
+    #select-group-bar span { font-size: .8rem; color: var(--sub); }
+    #btn-do-group {
+      background: var(--accent); color: #fff; border: none;
+      border-radius: 100px; padding: 6px 16px; font-size: .8rem; font-weight: 700; cursor: pointer;
+    }
+    #btn-cancel-select {
+      background: rgba(255,255,255,.07); color: var(--sub); border: none;
+      border-radius: 100px; padding: 6px 12px; font-size: .8rem; cursor: pointer;
     }
 
     /* ── 録音オーバーレイ（右下） ── */
@@ -537,12 +584,10 @@
       #rec-btn { width: 50px; height: 50px; font-size: 1.25rem; }
       #timer { font-size: 1rem; min-width: 38px; }
 
-      /* ── アップグレードボタン ── */
-      #upgrade-quick-btn {
-        bottom: 14px; left: 14px;
-        padding: 8px 14px 8px 11px;
-        font-size: .74rem;
-      }
+      /* ── アップグレードボタン（モバイルはテキスト短縮） ── */
+      #upgrade-quick-btn { font-size: .7rem; padding: 5px 10px 5px 9px; }
+      #upgrade-quick-btn .upgrade-label { display: none; }
+      #upgrade-quick-btn::before { content: '⬆'; margin-right: 2px; }
 
       /* ── モーダル ── */
       .modal-box {
@@ -588,6 +633,10 @@
   <div class="header-right">
     <span id="proc-badge" class="proc-badge" style="display:none">処理中 0件</span>
     <span id="api-status" class="badge badge-gray">待機中</span>
+    <!-- アップグレードボタン（free時のみ表示） -->
+    <button id="upgrade-quick-btn" style="display:none" onclick="showUpgradeModal('sessions')">
+      ⬆ <span class="upgrade-label">アップグレード</span>
+    </button>
     <!-- ユーザーメニュー（JS で表示） -->
     <div id="user-dropdown" class="user-dropdown" style="display:none">
       <div class="user-menu" id="user-menu-trigger">
@@ -604,6 +653,13 @@
     </div>
   </div>
 </header>
+
+<!-- 選択モードバー（モバイル長押しグルーピング） -->
+<div id="select-group-bar">
+  <span id="select-count-label">0件 選択中</span>
+  <button id="btn-cancel-select">キャンセル</button>
+  <button id="btn-do-group">グループにする</button>
+</div>
 
 <!-- アップグレードモーダル -->
 <div id="upgrade-modal" class="modal-overlay" style="display:none">
@@ -624,9 +680,6 @@
   <div id="mindmap-main-inner">
     <div class="empty-hint">録音・アイデア抽出後にホワイトボードが表示されます</div>
   </div>
-  <button id="upgrade-quick-btn" style="display:none" onclick="showUpgradeModal('sessions')">
-    ⬆ アップグレード
-  </button>
   <div class="rec-mini-overlay">
     <span id="timer">0:00</span>
     <button id="rec-btn" title="録音開始"><span id="btn-icon">🎤</span></button>
@@ -648,6 +701,6 @@
   </div>
 </div>
 
-<script src="/static/app.js?v=9"></script>
+<script src="/static/app.js?v=10"></script>
 </body>
 </html>

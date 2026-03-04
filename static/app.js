@@ -31,6 +31,11 @@ let draggedIdx        = null;
 let groupNames        = {};   // groupId → カスタム名
 let activeAddSection  = null; // 手動追加フォームが開いているカテゴリ
 
+// 選択モード（モバイル長押しグルーピング）
+let selectMode        = false;
+let selectedIdxs      = new Set();
+let longPressTimer    = null;
+
 // 認証 / セッション
 let currentUser        = null; // /auth/me のレスポンス
 let sessionTimerInterval = null;
@@ -120,6 +125,17 @@ elMainInner.addEventListener('click', e => {
     return;
   }
 
+  // 星ボタン（強調トグル）
+  const starBtn = e.target.closest('.wb-card-star');
+  if (starBtn) {
+    const idx = parseInt(starBtn.dataset.idx, 10);
+    if (!isNaN(idx) && allIdeas[idx]) {
+      allIdeas[idx].starred = !allIdeas[idx].starred;
+      renderWhiteboard();
+    }
+    return;
+  }
+
   // カード削除
   const deleteBtn = e.target.closest('.wb-card-delete');
   if (deleteBtn) {
@@ -171,7 +187,7 @@ elMainInner.addEventListener('dblclick', e => {
 
   // ── カードインライン編集 ──
   const card = e.target.closest('.wb-card');
-  if (!card || e.target.closest('.wb-card-delete') || card.classList.contains('editing')) return;
+  if (!card || e.target.closest('.wb-card-delete') || e.target.closest('.wb-card-star') || card.classList.contains('editing')) return;
 
   const idx = parseInt(card.dataset.idx, 10);
   if (isNaN(idx)) return;
@@ -535,9 +551,10 @@ function addLogEntry(text, size, isErr = false) {
 // ホワイトボード描画（グループ対応）
 // ============================================================
 function renderWhiteboard() {
-  // 1枚のカードを HTML 文字列に変換（タイトルは白固定 – カテゴリ色は左ボーダーのみ）
+  // 1枚のカードを HTML 文字列に変換
   const cardHtml = (idea, idx, color) => `
-    <div class="wb-card" draggable="true" data-idx="${idx}" style="border-left-color:${color}">
+    <div class="wb-card${idea.starred ? ' starred' : ''}" draggable="true" data-idx="${idx}" style="border-left-color:${idea.starred ? '#fbbf24' : color}">
+      <button class="wb-card-star" data-idx="${idx}" title="強調表示">${idea.starred ? '★' : '☆'}</button>
       <div class="wb-card-title">${escHtml(idea.title)}</div>
       ${idea.body ? `<div class="wb-card-body">${escHtml(idea.body)}</div>` : ''}
       <button class="wb-card-delete" data-idx="${idx}" title="削除">✕</button>
@@ -812,6 +829,103 @@ async function checkUpgradedParam() {
     } catch (_) { break; }
   }
 }
+
+// ============================================================
+// 選択モード（モバイル長押しグルーピング）
+// ============================================================
+const elSelectBar      = document.getElementById('select-group-bar');
+const elSelectLabel    = document.getElementById('select-count-label');
+const elBtnDoGroup     = document.getElementById('btn-do-group');
+const elBtnCancelSelect = document.getElementById('btn-cancel-select');
+
+function enterSelectMode(firstIdx) {
+  selectMode = true;
+  selectedIdxs = new Set([firstIdx]);
+  renderWhiteboard();
+  updateSelectBar();
+  // カードをselectable/selectedに
+  elMainInner.querySelectorAll('.wb-card').forEach(card => {
+    const idx = parseInt(card.dataset.idx, 10);
+    card.classList.add('selectable');
+    if (idx === firstIdx) card.classList.add('selected');
+  });
+}
+
+function exitSelectMode() {
+  selectMode = false;
+  selectedIdxs.clear();
+  elSelectBar.classList.remove('show');
+  renderWhiteboard();
+}
+
+function updateSelectBar() {
+  const n = selectedIdxs.size;
+  elSelectLabel.textContent = `${n}件 選択中`;
+  elBtnDoGroup.disabled = n < 2;
+  elBtnDoGroup.style.opacity = n < 2 ? '.5' : '1';
+  elSelectBar.classList.toggle('show', n > 0);
+}
+
+// 長押し検知（touchstart/touchend）
+elMainInner.addEventListener('touchstart', e => {
+  const card = e.target.closest('.wb-card');
+  if (!card) return;
+  // 削除・星ボタンは除外
+  if (e.target.closest('.wb-card-delete') || e.target.closest('.wb-card-star')) return;
+
+  if (selectMode) return; // 選択モード中はタップで選択（別ハンドラ）
+
+  const idx = parseInt(card.dataset.idx, 10);
+  if (isNaN(idx)) return;
+
+  longPressTimer = setTimeout(() => {
+    longPressTimer = null;
+    // 振動フィードバック（対応端末のみ）
+    if (navigator.vibrate) navigator.vibrate(40);
+    enterSelectMode(idx);
+  }, 450);
+}, { passive: true });
+
+elMainInner.addEventListener('touchend', () => {
+  if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
+}, { passive: true });
+
+elMainInner.addEventListener('touchmove', () => {
+  if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
+}, { passive: true });
+
+// 選択モード中のタップ: カード選択 / 解除
+elMainInner.addEventListener('click', e => {
+  if (!selectMode) return;
+  const card = e.target.closest('.wb-card');
+  if (!card) return;
+  if (e.target.closest('.wb-card-delete') || e.target.closest('.wb-card-star')) return;
+  e.stopPropagation();
+  const idx = parseInt(card.dataset.idx, 10);
+  if (isNaN(idx)) return;
+  if (selectedIdxs.has(idx)) { selectedIdxs.delete(idx); card.classList.remove('selected'); }
+  else { selectedIdxs.add(idx); card.classList.add('selected'); }
+  updateSelectBar();
+}, true);
+
+// グループ化実行
+elBtnDoGroup.addEventListener('click', () => {
+  if (selectedIdxs.size < 2) return;
+  const idxArr = [...selectedIdxs];
+  const firstCat = allIdeas[idxArr[0]]?.category;
+  // 同じカテゴリのみグループ化可能
+  const allSameCat = idxArr.every(i => allIdeas[i]?.category === firstCat);
+  if (!allSameCat) {
+    alert('同じカテゴリのカードのみグループにできます');
+    return;
+  }
+  const gid = 'g_' + Date.now();
+  idxArr.forEach(i => { if (allIdeas[i]) allIdeas[i].groupId = gid; });
+  exitSelectMode();
+});
+
+// キャンセル
+elBtnCancelSelect.addEventListener('click', exitSelectMode);
 
 // ============================================================
 // 起動
