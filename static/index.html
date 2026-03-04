@@ -397,26 +397,16 @@
       transform: scale(1.04);
     }
 
-    /* ── カード: 星マーク（強調） ── */
-    .wb-card-star {
-      position: absolute; top: 5px; left: 5px;
-      width: 16px; height: 16px; border-radius: 50%;
-      border: none; background: none; cursor: pointer;
-      font-size: .7rem; line-height: 1;
-      display: flex; align-items: center; justify-content: center;
-      opacity: 0; transition: opacity .15s;
-      padding: 0; color: rgba(255,200,50,.5);
-    }
-    .wb-card:hover .wb-card-star { opacity: 1; }
-    .wb-card.starred .wb-card-star { opacity: 1; color: #fbbf24; }
+    /* ── カード: 強調表示（タップでタイトル黄色） ── */
     .wb-card.starred {
-      background: rgba(251,191,36,.07);
-      border-left-color: #fbbf24 !important;
-      box-shadow: 0 0 0 1px rgba(251,191,36,.2), 0 2px 12px rgba(251,191,36,.08);
+      background: rgba(251,191,36,.06);
     }
-    .wb-card.starred .wb-card-title { color: #fde68a; }
-    /* 星があるのでタイトルのpadding-leftを少し広げる */
-    .wb-card-title { padding-right: 22px; padding-left: 18px; }
+    .wb-card.starred .wb-card-title { color: #fde68a !important; }
+    .wb-card-title { padding-right: 22px; }
+
+    /* ── カードのテキスト選択を無効化（長押しグルーピングのため） ── */
+    .wb-card { user-select: none; -webkit-user-select: none; }
+    .wb-group-label, .wb-group-name-input { user-select: text; -webkit-user-select: text; }
 
     /* ── 選択モード（モバイル長押しグルーピング） ── */
     .wb-card.selectable { cursor: pointer; }
@@ -425,7 +415,6 @@
       background: rgba(124,107,255,.12);
       transform: none;
     }
-    .wb-card.selected .wb-card-star { opacity: 0 !important; }
     #select-group-bar {
       position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%);
       display: none; align-items: center; gap: 10px;
@@ -585,9 +574,8 @@
       #timer { font-size: 1rem; min-width: 38px; }
 
       /* ── アップグレードボタン（モバイルはテキスト短縮） ── */
-      #upgrade-quick-btn { font-size: .7rem; padding: 5px 10px 5px 9px; }
+      #upgrade-quick-btn { font-size: .7rem; padding: 5px 10px; }
       #upgrade-quick-btn .upgrade-label { display: none; }
-      #upgrade-quick-btn::before { content: '⬆'; margin-right: 2px; }
 
       /* ── モーダル ── */
       .modal-box {
@@ -701,6 +689,6 @@
   </div>
 </div>
 
-<script src="/static/app.js?v=10"></script>
+<script src="/static/app.js?v=11"></script>
 </body>
 </html>

@@ -125,17 +125,6 @@ elMainInner.addEventListener('click', e => {
     return;
   }
 
-  // 星ボタン（強調トグル）
-  const starBtn = e.target.closest('.wb-card-star');
-  if (starBtn) {
-    const idx = parseInt(starBtn.dataset.idx, 10);
-    if (!isNaN(idx) && allIdeas[idx]) {
-      allIdeas[idx].starred = !allIdeas[idx].starred;
-      renderWhiteboard();
-    }
-    return;
-  }
-
   // カード削除
   const deleteBtn = e.target.closest('.wb-card-delete');
   if (deleteBtn) {
@@ -155,6 +144,21 @@ elMainInner.addEventListener('click', e => {
     allIdeas.forEach(i => { if (i.groupId === gid) delete i.groupId; });
     delete groupNames[gid];
     renderWhiteboard();
+    return;
+  }
+
+  // カード本体タップ → starred トグル（長押し直後・選択モード・編集中は除外）
+  if (selectMode) return;
+  const card = e.target.closest('.wb-card');
+  if (card && !card.classList.contains('editing') && !justEnteredSelectMode) {
+    const idx = parseInt(card.dataset.idx, 10);
+    if (!isNaN(idx) && allIdeas[idx]) {
+      allIdeas[idx].starred = !allIdeas[idx].starred;
+      // 再描画せず in-place 更新（チラつき防止）
+      card.classList.toggle('starred', allIdeas[idx].starred);
+      const titleEl = card.querySelector('.wb-card-title');
+      if (titleEl) titleEl.style.color = allIdeas[idx].starred ? '#fde68a' : '';
+    }
   }
 });
 
@@ -187,7 +191,7 @@ elMainInner.addEventListener('dblclick', e => {
 
   // ── カードインライン編集 ──
   const card = e.target.closest('.wb-card');
-  if (!card || e.target.closest('.wb-card-delete') || e.target.closest('.wb-card-star') || card.classList.contains('editing')) return;
+  if (!card || e.target.closest('.wb-card-delete') || card.classList.contains('editing')) return;
 
   const idx = parseInt(card.dataset.idx, 10);
   if (isNaN(idx)) return;
@@ -551,10 +555,9 @@ function addLogEntry(text, size, isErr = false) {
 // ホワイトボード描画（グループ対応）
 // ============================================================
 function renderWhiteboard() {
-  // 1枚のカードを HTML 文字列に変換
+  // 1枚のカードを HTML 文字列に変換（タップで starred トグル）
   const cardHtml = (idea, idx, color) => `
-    <div class="wb-card${idea.starred ? ' starred' : ''}" draggable="true" data-idx="${idx}" style="border-left-color:${idea.starred ? '#fbbf24' : color}">
-      <button class="wb-card-star" data-idx="${idx}" title="強調表示">${idea.starred ? '★' : '☆'}</button>
+    <div class="wb-card${idea.starred ? ' starred' : ''}" draggable="true" data-idx="${idx}" style="border-left-color:${color}">
       <div class="wb-card-title">${escHtml(idea.title)}</div>
       ${idea.body ? `<div class="wb-card-body">${escHtml(idea.body)}</div>` : ''}
       <button class="wb-card-delete" data-idx="${idx}" title="削除">✕</button>
@@ -866,23 +869,31 @@ function updateSelectBar() {
   elSelectBar.classList.toggle('show', n > 0);
 }
 
+// contextmenu（長押し時のテキスト選択メニュー）を抑制
+elMainInner.addEventListener('contextmenu', e => {
+  if (e.target.closest('.wb-card')) e.preventDefault();
+});
+
+// 長押し後の click 誤発火を防ぐフラグ
+let justEnteredSelectMode = false;
+
 // 長押し検知（touchstart/touchend）
 elMainInner.addEventListener('touchstart', e => {
   const card = e.target.closest('.wb-card');
   if (!card) return;
-  // 削除・星ボタンは除外
-  if (e.target.closest('.wb-card-delete') || e.target.closest('.wb-card-star')) return;
-
-  if (selectMode) return; // 選択モード中はタップで選択（別ハンドラ）
+  if (e.target.closest('.wb-card-delete')) return;
+  if (selectMode) return;
 
   const idx = parseInt(card.dataset.idx, 10);
   if (isNaN(idx)) return;
 
   longPressTimer = setTimeout(() => {
     longPressTimer = null;
-    // 振動フィードバック（対応端末のみ）
     if (navigator.vibrate) navigator.vibrate(40);
+    justEnteredSelectMode = true;
     enterSelectMode(idx);
+    // 少し後にフラグをリセット（click イベントの後）
+    setTimeout(() => { justEnteredSelectMode = false; }, 300);
   }, 450);
 }, { passive: true });
 
@@ -899,7 +910,7 @@ elMainInner.addEventListener('click', e => {
   if (!selectMode) return;
   const card = e.target.closest('.wb-card');
   if (!card) return;
-  if (e.target.closest('.wb-card-delete') || e.target.closest('.wb-card-star')) return;
+  if (e.target.closest('.wb-card-delete')) return;
   e.stopPropagation();
   const idx = parseInt(card.dataset.idx, 10);
   if (isNaN(idx)) return;
