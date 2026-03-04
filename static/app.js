@@ -43,6 +43,9 @@ let undoTimer  = null;
 // マイク選択
 let selectedMicId = null;
 
+// ドラッグ挿入モード（'before' | 'after' | 'group' | null）
+let dragInsertMode = null;
+
 // 認証 / セッション
 let currentUser        = null; // /auth/me のレスポンス
 let sessionTimerInterval = null;
@@ -377,33 +380,48 @@ elMainInner.addEventListener('dragstart', e => {
 });
 
 elMainInner.addEventListener('dragend', () => {
-  draggedIdx = null;
-  elMainInner.querySelectorAll('.dragging, .drag-over, .drag-over-section')
-    .forEach(el => el.classList.remove('dragging', 'drag-over', 'drag-over-section'));
+  draggedIdx     = null;
+  dragInsertMode = null;
+  elMainInner.querySelectorAll('.dragging, .drag-over, .drag-over-section, .insert-before, .insert-after')
+    .forEach(el => el.classList.remove('dragging', 'drag-over', 'drag-over-section', 'insert-before', 'insert-after'));
 });
 
 elMainInner.addEventListener('dragover', e => {
   e.preventDefault();
-  elMainInner.querySelectorAll('.drag-over, .drag-over-section')
-    .forEach(el => el.classList.remove('drag-over', 'drag-over-section'));
+  // 全インジケータをリセット
+  elMainInner.querySelectorAll('.drag-over, .drag-over-section, .insert-before, .insert-after')
+    .forEach(el => el.classList.remove('drag-over', 'drag-over-section', 'insert-before', 'insert-after'));
 
   const card = e.target.closest('.wb-card:not(.dragging)');
   if (card && parseInt(card.dataset.idx, 10) !== draggedIdx) {
-    card.classList.add('drag-over');
+    const rect  = card.getBoundingClientRect();
+    const relY  = e.clientY - rect.top;
+    const third = rect.height / 3;
+    if (relY < third) {
+      card.classList.add('insert-before');
+      dragInsertMode = 'before';
+    } else if (relY > third * 2) {
+      card.classList.add('insert-after');
+      dragInsertMode = 'after';
+    } else {
+      card.classList.add('drag-over');
+      dragInsertMode = 'group';
+    }
     e.dataTransfer.dropEffect = 'move';
     return;
   }
   const sectionBody = e.target.closest('.wb-section-body');
   if (sectionBody) {
     sectionBody.classList.add('drag-over-section');
+    dragInsertMode = null;
     e.dataTransfer.dropEffect = 'move';
   }
 });
 
 elMainInner.addEventListener('drop', e => {
   e.preventDefault();
-  elMainInner.querySelectorAll('.drag-over, .drag-over-section')
-    .forEach(el => el.classList.remove('drag-over', 'drag-over-section'));
+  elMainInner.querySelectorAll('.drag-over, .drag-over-section, .insert-before, .insert-after')
+    .forEach(el => el.classList.remove('drag-over', 'drag-over-section', 'insert-before', 'insert-after'));
 
   if (draggedIdx === null || isNaN(draggedIdx)) return;
   const draggedIdea = allIdeas[draggedIdx];
@@ -413,32 +431,36 @@ elMainInner.addEventListener('drop', e => {
   const targetCard = e.target.closest('.wb-card:not(.dragging)');
   if (targetCard) {
     const targetIdx = parseInt(targetCard.dataset.idx, 10);
-    if (isNaN(targetIdx) || targetIdx === draggedIdx) return;
+    if (isNaN(targetIdx) || targetIdx === draggedIdx) { dragInsertMode = null; return; }
     const targetIdea = allIdeas[targetIdx];
 
-    if (draggedIdea.category === targetIdea.category) {
-      // ── 同カテゴリ → 並べ替え（ターゲットの前に挿入） ──
-      const movedIdea = allIdeas.splice(draggedIdx, 1)[0];
-      const newTargetIdx = allIdeas.indexOf(targetIdea);
-      allIdeas.splice(newTargetIdx, 0, movedIdea);
-      cleanupSingletonGroups();
-      renderWhiteboard();
-    } else {
-      // ── 異カテゴリ → カテゴリ移動 ＋ グループ化 ──
+    if (dragInsertMode === 'group') {
+      // ── 中央ドロップ → グループ化（同カテゴリのみ。異カテゴリは移動＋グループ） ──
       draggedIdea.category = targetIdea.category;
       if (targetIdea.groupId) {
-        // ターゲットがグループ内 → そのグループに合流
         draggedIdea.groupId = targetIdea.groupId;
       } else {
-        // ターゲットが未グループ → 新グループ作成
-        // （ドラッグ元がグループにいた場合も古いグループIDは捨てて新規）
         const gid = 'g_' + Date.now();
         draggedIdea.groupId = gid;
         targetIdea.groupId  = gid;
       }
       cleanupSingletonGroups();
       renderWhiteboard();
+    } else {
+      // ── 上/下ドロップ → 並べ替え（同カテゴリ）or カテゴリ移動（異カテゴリ） ──
+      if (draggedIdea.category === targetIdea.category) {
+        const movedIdea = allIdeas.splice(draggedIdx, 1)[0];
+        const newTargetIdx = allIdeas.indexOf(targetIdea);
+        const insertIdx = dragInsertMode === 'after' ? newTargetIdx + 1 : newTargetIdx;
+        allIdeas.splice(insertIdx, 0, movedIdea);
+      } else {
+        draggedIdea.category = targetIdea.category;
+        delete draggedIdea.groupId;
+      }
+      cleanupSingletonGroups();
+      renderWhiteboard();
     }
+    dragInsertMode = null;
     return;
   }
 

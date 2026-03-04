@@ -248,6 +248,15 @@
       background: rgba(124,107,255,.1);
       transform: none;
     }
+    /* 並べ替え：挿入ライン */
+    .wb-card.insert-before::before,
+    .wb-card.insert-after::after {
+      content: '';
+      position: absolute; left: 0; right: 0; height: 2px;
+      background: var(--accent); border-radius: 2px; z-index: 5;
+    }
+    .wb-card.insert-before::before { top: -4px; }
+    .wb-card.insert-after::after  { bottom: -4px; }
     .wb-card-title {
       font-size: .82rem; font-weight: 600; line-height: 1.35;
       color: var(--text);      /* 白系固定 – カテゴリ色より格段に読みやすい */
@@ -775,6 +784,6 @@
   <button id="undo-btn">元に戻す</button>
 </div>
 
-<script src="/static/app.js?v=13"></script>
+<script src="/static/app.js?v=14"></script>
 </body>
 </html>
