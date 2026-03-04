@@ -504,6 +504,70 @@
     ::-webkit-scrollbar-track { background: transparent; }
     ::-webkit-scrollbar-thumb { background: rgba(255,255,255,.1); border-radius: 2px; }
 
+    /* ── アンドゥトースト ── */
+    #undo-toast {
+      position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+      background: #1a2036; border: 1px solid var(--border-hi);
+      border-radius: 100px; padding: 10px 10px 10px 18px;
+      align-items: center; gap: 10px; display: none;
+      font-size: .82rem; color: var(--sub); z-index: 50;
+      box-shadow: 0 8px 24px rgba(0,0,0,.4); white-space: nowrap;
+    }
+    #undo-toast.show { display: flex; animation: toastUp .22s ease-out; }
+    #undo-btn {
+      background: var(--accent); color: #fff; border: none;
+      border-radius: 100px; padding: 5px 14px;
+      font-size: .78rem; font-weight: 700; cursor: pointer;
+    }
+    #undo-btn:hover { background: #9b8fff; }
+    @keyframes toastUp {
+      from { opacity:0; transform: translateX(-50%) translateY(8px); }
+      to   { opacity:1; transform: translateX(-50%) translateY(0); }
+    }
+
+    /* ── エクスポートボタン ── */
+    .mindmap-header-right { display: flex; align-items: center; gap: 10px; }
+    #btn-export {
+      background: none; border: 1px solid var(--border-hi); color: var(--muted);
+      font-size: .68rem; cursor: pointer; padding: 3px 10px;
+      border-radius: 100px; transition: background .15s, color .15s;
+      white-space: nowrap;
+    }
+    #btn-export:hover { background: rgba(255,255,255,.07); color: var(--text); }
+    #btn-export:disabled { opacity: .35; cursor: default; }
+
+    /* ── マイク選択 ── */
+    .mic-select-wrap { position: relative; display: flex; }
+    .mic-btn {
+      width: 28px; height: 28px; border-radius: 50%; border: 1px solid transparent;
+      cursor: pointer; background: rgba(255,255,255,.07); color: var(--sub);
+      font-size: .82rem; display: flex; align-items: center; justify-content: center;
+      transition: background .15s; flex-shrink: 0;
+    }
+    .mic-btn:hover { background: rgba(255,255,255,.13); color: var(--text); }
+    .mic-btn.has-selection { border-color: rgba(124,107,255,.4); color: var(--accent); }
+    .mic-dropdown {
+      position: absolute; bottom: calc(100% + 10px); left: 50%; transform: translateX(-50%);
+      background: #0e1525; border: 1px solid var(--border-hi);
+      border-radius: 12px; padding: 6px; min-width: 230px;
+      box-shadow: 0 8px 32px rgba(0,0,0,.5); z-index: 30; display: none;
+    }
+    .mic-dropdown.open { display: block; }
+    .mic-dropdown-title {
+      font-size: .63rem; font-weight: 800; color: var(--muted);
+      text-transform: uppercase; letter-spacing: .1em;
+      padding: 4px 12px 6px;
+    }
+    .mic-option {
+      display: block; width: 100%; text-align: left;
+      padding: 8px 12px; border: none; background: none;
+      color: var(--sub); font-size: .78rem; border-radius: 7px;
+      cursor: pointer; transition: background .12s, color .12s;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .mic-option:hover { background: rgba(255,255,255,.06); color: var(--text); }
+    .mic-option.active { color: var(--accent); font-weight: 700; }
+
     /* ════════════════════════════════════════════
        モバイル（〜640px）
     ════════════════════════════════════════════ */
@@ -663,12 +727,22 @@
 <div class="mindmap-main-card">
   <div class="mindmap-main-header">
     <span class="mindmap-main-label">ホワイトボード</span>
-    <span id="status-text">ボタンを押して録音を開始してください</span>
+    <div class="mindmap-header-right">
+      <button id="btn-export" disabled title="ホワイトボードをJSONで保存">↓ 保存</button>
+      <span id="status-text">ボタンを押して録音を開始してください</span>
+    </div>
   </div>
   <div id="mindmap-main-inner">
     <div class="empty-hint">録音・アイデア抽出後にホワイトボードが表示されます</div>
   </div>
   <div class="rec-mini-overlay">
+    <div class="mic-select-wrap" id="mic-select-wrap">
+      <button class="mic-btn" id="mic-btn" title="マイクを選択">🎙</button>
+      <div class="mic-dropdown" id="mic-dropdown">
+        <div class="mic-dropdown-title">マイク選択</div>
+        <div id="mic-list"></div>
+      </div>
+    </div>
     <span id="timer">0:00</span>
     <button id="rec-btn" title="録音開始"><span id="btn-icon">🎤</span></button>
   </div>
@@ -689,6 +763,12 @@
   </div>
 </div>
 
-<script src="/static/app.js?v=11"></script>
+<!-- アンドゥトースト -->
+<div id="undo-toast">
+  <span>カードを削除しました</span>
+  <button id="undo-btn">元に戻す</button>
+</div>
+
+<script src="/static/app.js?v=12"></script>
 </body>
 </html>

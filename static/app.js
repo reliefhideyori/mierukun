@@ -36,6 +36,13 @@ let selectMode        = false;
 let selectedIdxs      = new Set();
 let longPressTimer    = null;
 
+// アンドゥ（カード削除取り消し）
+let undoStack  = null; // { idea, idx }
+let undoTimer  = null;
+
+// マイク選択
+let selectedMicId = null;
+
 // 認証 / セッション
 let currentUser        = null; // /auth/me のレスポンス
 let sessionTimerInterval = null;
@@ -54,6 +61,12 @@ const elLogBody   = document.getElementById('log-body');
 const elLogCount  = document.getElementById('log-count');
 const elBtnClear  = document.getElementById('btn-clear');
 const elMainInner = document.getElementById('mindmap-main-inner');
+const elUndoToast = document.getElementById('undo-toast');
+const elUndoBtn   = document.getElementById('undo-btn');
+const elBtnExport = document.getElementById('btn-export');
+const elMicBtn    = document.getElementById('mic-btn');
+const elMicDropdown = document.getElementById('mic-dropdown');
+const elMicList   = document.getElementById('mic-list');
 
 // ============================================================
 // ユーティリティ
@@ -76,6 +89,93 @@ function cleanupSingletonGroups() {
     }
   });
 }
+
+// ============================================================
+// アンドゥ（カード削除取り消し）
+// ============================================================
+function showUndoToast() {
+  clearTimeout(undoTimer);
+  elUndoToast.classList.add('show');
+  undoTimer = setTimeout(() => {
+    elUndoToast.classList.remove('show');
+    undoStack = null;
+  }, 5000);
+}
+
+elUndoBtn.addEventListener('click', () => {
+  if (!undoStack) return;
+  clearTimeout(undoTimer);
+  const { idea, idx } = undoStack;
+  allIdeas.splice(Math.min(idx, allIdeas.length), 0, idea);
+  undoStack = null;
+  elUndoToast.classList.remove('show');
+  renderWhiteboard();
+});
+
+// ============================================================
+// JSONエクスポート
+// ============================================================
+elBtnExport.addEventListener('click', () => {
+  if (!allIdeas.length && !allTranscripts) return;
+  const data = {
+    exportedAt: new Date().toISOString(),
+    whiteboard: allIdeas,
+    transcript: allTranscripts,
+  };
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  const ts   = new Date().toISOString().slice(0, 16).replace('T', '_').replace(':', '-');
+  a.href     = url;
+  a.download = `zonist-${ts}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+});
+
+// ============================================================
+// マイク選択
+// ============================================================
+async function loadMicList() {
+  elMicList.innerHTML = '<div style="padding:6px 12px;font-size:.75rem;color:var(--muted)">取得中…</div>';
+  try {
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    const mics    = devices.filter(d => d.kind === 'audioinput');
+    elMicList.innerHTML = '';
+    if (!mics.length) {
+      elMicList.innerHTML = '<div style="padding:6px 12px;font-size:.75rem;color:var(--muted)">マイクが見つかりません</div>';
+      return;
+    }
+    mics.forEach(mic => {
+      const btn = document.createElement('button');
+      btn.className   = 'mic-option' + (mic.deviceId === (selectedMicId || 'default') ? ' active' : '');
+      btn.textContent = mic.label || `マイク (${mic.deviceId.slice(0, 8)}…)`;
+      btn.title       = btn.textContent;
+      btn.dataset.deviceId = mic.deviceId;
+      btn.addEventListener('click', () => {
+        selectedMicId = mic.deviceId;
+        elMicBtn.classList.add('has-selection');
+        elMicDropdown.classList.remove('open');
+        loadMicList();
+      });
+      elMicList.appendChild(btn);
+    });
+  } catch {
+    elMicList.innerHTML = '<div style="padding:6px 12px;font-size:.75rem;color:var(--muted)">取得できません</div>';
+  }
+}
+
+elMicBtn.addEventListener('click', async e => {
+  e.stopPropagation();
+  const isOpen = elMicDropdown.classList.contains('open');
+  elMicDropdown.classList.toggle('open', !isOpen);
+  if (!isOpen) await loadMicList();
+});
+
+document.addEventListener('click', e => {
+  if (!e.target.closest('#mic-select-wrap')) {
+    elMicDropdown.classList.remove('open');
+  }
+});
 
 // ============================================================
 // ホワイトボード: クリック委譲（削除 / グループ解除）
@@ -125,14 +225,16 @@ elMainInner.addEventListener('click', e => {
     return;
   }
 
-  // カード削除
+  // カード削除（アンドゥ対応）
   const deleteBtn = e.target.closest('.wb-card-delete');
   if (deleteBtn) {
     const idx = parseInt(deleteBtn.dataset.idx, 10);
-    if (!isNaN(idx)) {
+    if (!isNaN(idx) && allIdeas[idx]) {
+      undoStack = { idea: { ...allIdeas[idx] }, idx };
       allIdeas.splice(idx, 1);
       cleanupSingletonGroups();
       renderWhiteboard();
+      showUndoToast();
     }
     return;
   }
@@ -373,7 +475,12 @@ async function startRecording() {
 
   let stream;
   try {
-    stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    const audioConstraints = selectedMicId
+      ? { deviceId: { exact: selectedMicId } }
+      : true;
+    stream = await navigator.mediaDevices.getUserMedia({ audio: audioConstraints });
+    // 権限取得後にラベル付きでリストを更新
+    loadMicList().catch(() => {});
   } catch (e) {
     setStatus(e.name === 'NotAllowedError'
       ? 'マイクへのアクセスが拒否されました' : `マイクエラー: ${e.message}`, true);
@@ -621,6 +728,8 @@ function renderWhiteboard() {
   }).join('');
 
   elMainInner.innerHTML = `<div class="whiteboard">${sections}</div>`;
+  // エクスポートボタン：カードがあれば有効化
+  if (elBtnExport) elBtnExport.disabled = allIdeas.length === 0;
 }
 
 // ============================================================
