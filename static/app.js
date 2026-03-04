@@ -409,27 +409,36 @@ elMainInner.addEventListener('drop', e => {
   const draggedIdea = allIdeas[draggedIdx];
   if (!draggedIdea) return;
 
-  // ── カードにドロップ → グループ化 ──
+  // ── カードにドロップ ──
   const targetCard = e.target.closest('.wb-card:not(.dragging)');
   if (targetCard) {
     const targetIdx = parseInt(targetCard.dataset.idx, 10);
     if (isNaN(targetIdx) || targetIdx === draggedIdx) return;
     const targetIdea = allIdeas[targetIdx];
 
-    // ドラッグ元のカテゴリをターゲットに揃える
-    draggedIdea.category = targetIdea.category;
-
-    // グループID を統合
-    if (targetIdea.groupId) {
-      draggedIdea.groupId = targetIdea.groupId;
-    } else if (draggedIdea.groupId) {
-      targetIdea.groupId = draggedIdea.groupId;
+    if (draggedIdea.category === targetIdea.category) {
+      // ── 同カテゴリ → 並べ替え（ターゲットの前に挿入） ──
+      const movedIdea = allIdeas.splice(draggedIdx, 1)[0];
+      const newTargetIdx = allIdeas.indexOf(targetIdea);
+      allIdeas.splice(newTargetIdx, 0, movedIdea);
+      cleanupSingletonGroups();
+      renderWhiteboard();
     } else {
-      const gid = 'g_' + Date.now();
-      draggedIdea.groupId = gid;
-      targetIdea.groupId  = gid;
+      // ── 異カテゴリ → カテゴリ移動 ＋ グループ化 ──
+      draggedIdea.category = targetIdea.category;
+      if (targetIdea.groupId) {
+        // ターゲットがグループ内 → そのグループに合流
+        draggedIdea.groupId = targetIdea.groupId;
+      } else {
+        // ターゲットが未グループ → 新グループ作成
+        // （ドラッグ元がグループにいた場合も古いグループIDは捨てて新規）
+        const gid = 'g_' + Date.now();
+        draggedIdea.groupId = gid;
+        targetIdea.groupId  = gid;
+      }
+      cleanupSingletonGroups();
+      renderWhiteboard();
     }
-    renderWhiteboard();
     return;
   }
 

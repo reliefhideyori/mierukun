@@ -173,7 +173,7 @@
     }
     #mindmap-main-inner .empty-hint { padding: 80px 0; text-align: center; }
 
-    /* ── ホワイトボード: 2カラム × 2行（アイデアが左全体を占める） ── */
+    /* ── ホワイトボード: 2カラム（全セクション同サイズ） ── */
     .whiteboard {
       display: grid;
       grid-template-columns: 1fr 1fr;
@@ -181,7 +181,6 @@
       gap: 10px;
       width: 100%;
     }
-    .wb-section:first-child { grid-row: span 2; }
 
     .wb-section {
       background: rgba(255,255,255,.03);
@@ -528,13 +527,20 @@
     /* ── エクスポートボタン ── */
     .mindmap-header-right { display: flex; align-items: center; gap: 10px; }
     #btn-export {
-      background: none; border: 1px solid var(--border-hi); color: var(--muted);
+      background: rgba(124,107,255,.13); border: 1px solid rgba(124,107,255,.3);
+      color: #b0a4ff;
       font-size: .68rem; cursor: pointer; padding: 3px 10px;
-      border-radius: 100px; transition: background .15s, color .15s;
+      border-radius: 100px; transition: background .15s, color .15s, border-color .15s;
       white-space: nowrap;
     }
-    #btn-export:hover { background: rgba(255,255,255,.07); color: var(--text); }
-    #btn-export:disabled { opacity: .35; cursor: default; }
+    #btn-export:not(:disabled):hover {
+      background: rgba(124,107,255,.24); border-color: rgba(124,107,255,.5);
+      color: #c8bfff;
+    }
+    #btn-export:disabled {
+      background: none; border-color: var(--border); color: var(--muted);
+      opacity: .28; cursor: default;
+    }
 
     /* ── マイク選択 ── */
     .mic-select-wrap { position: relative; display: flex; }
@@ -603,7 +609,7 @@
         grid-auto-rows: minmax(100px, auto);
         gap: 8px;
       }
-      .wb-section:first-child { grid-row: span 1; }
+
 
       /* ── セクション内カードも1列 ── */
       .wb-section-body {
@@ -769,6 +775,6 @@
   <button id="undo-btn">元に戻す</button>
 </div>
 
-<script src="/static/app.js?v=12"></script>
+<script src="/static/app.js?v=13"></script>
 </body>
 </html>
