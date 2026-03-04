@@ -394,19 +394,17 @@ elMainInner.addEventListener('dragover', e => {
 
   const card = e.target.closest('.wb-card:not(.dragging)');
   if (card && parseInt(card.dataset.idx, 10) !== draggedIdx) {
-    const rect  = card.getBoundingClientRect();
-    const relY  = e.clientY - rect.top;
-    const third = rect.height / 3;
-    if (relY < third) {
-      card.classList.add('insert-before');
-      dragInsertMode = 'before';
-    } else if (relY > third * 2) {
-      card.classList.add('insert-after');
-      dragInsertMode = 'after';
-    } else {
-      card.classList.add('drag-over');
-      dragInsertMode = 'group';
-    }
+    const rect = card.getBoundingClientRect();
+    const relX = (e.clientX - rect.left)  / rect.width;   // 0〜1
+    const relY = (e.clientY - rect.top)   / rect.height;  // 0〜1
+    let mode;
+    // 左30% or 上30% → before / 右30% or 下30% → after / 中央 → group
+    if      (relX < 0.3 || relY < 0.3) mode = 'before';
+    else if (relX > 0.7 || relY > 0.7) mode = 'after';
+    else                                 mode = 'group';
+
+    dragInsertMode = mode;
+    card.classList.add(mode === 'group' ? 'drag-over' : `insert-${mode}`);
     e.dataTransfer.dropEffect = 'move';
     return;
   }

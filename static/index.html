@@ -316,7 +316,10 @@
     }
     .wb-group:hover .wb-group-ungroup { opacity: 1; }
     .wb-group-ungroup:hover { background: rgba(255,255,255,.2); color: var(--text); }
-    .wb-group-cards { padding: 6px; display: flex; flex-direction: column; gap: 5px; }
+    .wb-group-cards {
+      padding: 6px;
+      display: grid; grid-template-columns: 1fr 1fr; gap: 5px;
+    }
     /* グループ内のカードは左端インデント感を減らす */
     .wb-group .wb-card { border-left-width: 2px; border-radius: 7px; }
 
@@ -628,6 +631,8 @@
       .wb-section-body .wb-group,
       .wb-section-body .wb-add-form,
       .wb-section-body .wb-empty { grid-column: 1; }
+      /* グループ内も1列 */
+      .wb-group-cards { grid-template-columns: 1fr; }
       .wb-section-title { font-size: .82rem; }
       .wb-section-header { padding: 10px 12px 9px; }
       .wb-add-btn { font-size: 1.2rem; width: 28px; height: 28px; }
@@ -784,6 +789,6 @@
   <button id="undo-btn">元に戻す</button>
 </div>
 
-<script src="/static/app.js?v=14"></script>
+<script src="/static/app.js?v=15"></script>
 </body>
 </html>
