@@ -268,6 +268,7 @@ if __name__ == "__main__":
         print("  .env ファイルに GEMINI_API_KEY=your_key を設定してください。\n")
         exit(1)
 
+    port = int(os.getenv("PORT", 8001))   # Railway は PORT 環境変数を自動セット
     print("\nZONIST を起動します…")
-    print("ブラウザで http://localhost:8001 を開いてください\n")
-    uvicorn.run("main:app", host="0.0.0.0", port=8001, reload=False)
+    print(f"ブラウザで http://localhost:{port} を開いてください\n")
+    uvicorn.run("main:app", host="0.0.0.0", port=port, reload=False)
