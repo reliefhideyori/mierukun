@@ -104,12 +104,14 @@ async def auth_google_callback(request: Request, db: Session = Depends(get_db)):
 
     jwt_token = create_jwt(user.id)
     response  = RedirectResponse(url="/app")
+    is_https  = APP_BASE_URL.startswith("https://")
     response.set_cookie(
         key="zonist_token",
         value=jwt_token,
         max_age=60 * 60 * 24 * 30,
         httponly=True,
         samesite="lax",
+        secure=is_https,          # 本番HTTPS環境では必須
     )
     return response
 
